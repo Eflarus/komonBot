@@ -40,3 +40,7 @@ backups/
 
 # uv
 .python-version
+
+# Webapp
+webapp/node_modules/
+webapp/dist/

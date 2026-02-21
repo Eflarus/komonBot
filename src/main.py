@@ -153,4 +153,4 @@ app.include_router(router)
 app.include_router(webhook_router)
 
 # Static files (webapp)
-app.mount("/webapp", StaticFiles(directory="webapp", html=True), name="webapp")
+app.mount("/webapp", StaticFiles(directory="webapp/dist", html=True), name="webapp")
