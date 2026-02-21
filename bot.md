@@ -25,15 +25,17 @@ Nginx проксирует саброут на FastAPI.
 | Database | PostgreSQL 16 (asyncpg) |
 | Migrations | Alembic |
 | Telegram Bot API | aiogram 3.x (только webhook + Mini App launch) |
-| Telegram Web App | React/Preact или Vanilla JS (через Telegram Web App SDK) |
+| Telegram Web App | Preact + HTM (no build step, CDN imports, ~3KB) |
 | Ghost integration | Ghost Admin API (PyJWT + httpx) |
 | Image storage | Ghost CMS (upload через Admin API) |
 | Task scheduler | APScheduler (async) |
 | Validation | Pydantic v2 |
 | Rate limiting | slowapi (leaky bucket, per-IP) |
 | Sanitization | bleach / markupsafe |
+| Retry logic | tenacity (exponential backoff) |
+| Logging | structlog (JSON, request_id) |
 | Linting/Format | ruff, black |
-| Testing | pytest + pytest-asyncio + httpx (AsyncClient) |
+| Testing | pytest + pytest-asyncio + httpx (AsyncClient) + respx (mock HTTP) |
 | Containerization | Docker + docker-compose |
 
 ---
@@ -109,11 +111,21 @@ komonBot/
 │       ├── __init__.py
 │       ├── telegram_auth.py     # Telegram initData validation (HMAC)
 │       └── ghost_jwt.py         # Ghost Admin API JWT token generation
-├── webapp/                       # Telegram Mini App frontend
-│   ├── index.html
-│   ├── css/
-│   ├── js/
-│   └── ...
+├── entrypoint.sh                # alembic upgrade + uvicorn start
+├── webapp/                       # Telegram Mini App frontend (Preact + HTM, no build)
+│   ├── index.html               # SPA entry point (CDN imports)
+│   ├── app.js                   # main app, hash router
+│   ├── components/              # Preact components
+│   │   ├── event-list.js
+│   │   ├── event-form.js
+│   │   ├── course-list.js
+│   │   ├── course-form.js
+│   │   ├── contact-list.js
+│   │   └── user-list.js
+│   ├── services/
+│   │   └── api.js               # fetch wrapper with initData header + 401 handling
+│   └── styles/
+│       └── app.css              # Telegram theme vars (var(--tg-theme-bg-color) etc.)
 └── tests/
     ├── __init__.py
     ├── conftest.py              # fixtures: async db, test client, mock ghost, etc.
@@ -189,7 +201,7 @@ class Course(Base):
     image_desktop: Mapped[str | None] = mapped_column(String(500)) # Ghost URL, desktop card image
     image_mobile: Mapped[str | None] = mapped_column(String(500))  # Ghost URL, mobile card image
     cost: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    currency: Mapped[str] = mapped_column(String(3), default="ILS")
+    currency: Mapped[str] = mapped_column(String(3), default="RUB")
     status: Mapped[CourseStatus] = mapped_column(
         SQLEnum(CourseStatus), default=CourseStatus.DRAFT
     )
@@ -210,7 +222,7 @@ class WhitelistUser(Base):
     username: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(20), default="editor")  # "admin" | "editor"
+    # YAGNI: no roles for now, all whitelisted users are admins
     added_by: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 ```
@@ -468,16 +480,18 @@ publish, unpublish, cancel, auto-archive) система:
     <div class="cource-desc">
         <h3 class="cource-header">{title}</h3>
         <p class="long-text smh">{description}</p>
-        <div class="cource-more">
+        <details class="cource-more">
+            <summary><button type="button">Узнать подробнее</button></summary>
             <h4>Даты</h4>
             <p>{schedule}</p>
             <!-- detailed_description optional -->
             <div><p>{detailed_description}</p></div>
-        </div>
-        <button>Узнать подробнее</button>
+        </details>
     </div>
 </div>
 ```
+
+> `<details>/<summary>` — нативный CSS-only toggle, не требует JS. Ghost 6.x не strip'ит эти теги.
 
 Карточки курсов оборачиваются в контейнер:
 ```html
@@ -689,7 +703,7 @@ Actions:
 - Подробное описание (textarea, optional)
 - Расписание (text, required)
 - Стоимость (number, required)
-- Валюта (select, default ILS)
+- Валюта (select, default RUB)
 - Изображение Desktop (file upload, optional) — для десктопной версии карточки
 - Изображение Mobile (file upload, optional) — для мобильной версии карточки
 - Порядок (number, default 0)
@@ -764,8 +778,18 @@ COPY alembic.ini ./
 COPY alembic/ alembic/
 COPY src/ src/
 COPY webapp/ webapp/
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["./entrypoint.sh"]
+```
+
+`entrypoint.sh`:
+```bash
+#!/bin/sh
+set -e
+uv run alembic upgrade head
+exec uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
 ### `docker-compose.yml`
@@ -1014,3 +1038,674 @@ uv run pytest tests/ -v --cov=src --cov-report=term-missing
 9. **APScheduler** — легковесный, async-native, не нужен Celery/Redis для 3 простых задач
 10. **Monorepo** — backend + webapp в одном репо для простоты деплоя
 11. **Subroute deploy** — сервис за Nginx на конфигурируемом `ROOT_PATH`, FastAPI `root_path` для корректных URL. Ghost и бэкенд на одном домене — нет проблем с CORS/cookies
+
+---
+
+## Security Hardening
+
+### S1. initData expiry validation
+
+```python
+# utils/telegram_auth.py
+INIT_DATA_MAX_AGE = 600  # seconds (10 min)
+
+def validate_init_data(init_data: str, bot_token: str) -> TelegramUser:
+    """Validate Telegram WebApp initData."""
+    parsed = parse_qs(init_data)
+
+    # 1. Check auth_date freshness
+    auth_date = int(parsed["auth_date"][0])
+    if time.time() - auth_date > INIT_DATA_MAX_AGE:
+        raise HTTPException(401, "initData expired")
+
+    # 2. Verify HMAC-SHA256
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    check_string = "\n".join(f"{k}={v[0]}" for k, v in sorted(parsed.items()) if k != "hash")
+    computed_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(computed_hash, parsed["hash"][0]):
+        raise HTTPException(401, "Invalid initData signature")
+
+    # 3. Extract user
+    return TelegramUser.model_validate_json(parsed["user"][0])
+```
+
+### S2. Webhook secret verification
+
+```python
+# bot/setup.py
+async def setup_bot():
+    await bot.set_webhook(
+        settings.WEBHOOK_URL,
+        secret_token=settings.WEBHOOK_SECRET,  # Telegram sends this in header
+    )
+
+# api/webhook.py
+@router.post("/webhook/telegram")
+async def telegram_webhook(
+    request: Request,
+    x_telegram_bot_api_secret_token: str = Header(...),
+):
+    if not hmac.compare_digest(x_telegram_bot_api_secret_token, settings.WEBHOOK_SECRET):
+        raise HTTPException(403, "Invalid webhook secret")
+    # ... process update
+```
+
+### S3. Image upload validation
+
+```python
+# api/events.py, api/courses.py
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_IMAGE_SIZE = 1 * 1024 * 1024  # 1 MB — Ghost page loads all images at once
+MAGIC_BYTES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG": "image/png",
+    b"RIFF": "image/webp",  # + check for WEBP at offset 8
+}
+
+async def validate_image(file: UploadFile) -> bytes:
+    """Read, validate magic bytes + MIME, enforce size limit."""
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(413, "Image too large (max 1MB)")
+
+    # Check magic bytes
+    detected_type = None
+    for magic, mime in MAGIC_BYTES.items():
+        if content[:len(magic)] == magic:
+            detected_type = mime
+            break
+    if detected_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(400, f"Invalid image type. Allowed: JPEG, PNG, WebP")
+
+    return content
+```
+
+> **SVG запрещён** — SVG может содержать inline JavaScript (XSS), a Ghost отдаёт его с `Content-Type: image/svg+xml`.
+
+### S4. HTML escaping в ContentPageBuilder
+
+```python
+# services/content_page.py
+from markupsafe import escape
+
+class ContentPageBuilder:
+    def _render_event_card(self, event: Event) -> str:
+        """All user-supplied values MUST go through markupsafe.escape()."""
+        title = escape(event.title)
+        location = escape(event.location)
+        # ... etc
+        # ticket_link — дополнительно валидируется как URL (no javascript: scheme)
+        if event.ticket_link:
+            parsed = urlparse(event.ticket_link)
+            if parsed.scheme not in ("http", "https"):
+                ticket_link = None  # drop dangerous schemes
+```
+
+### S5. OpenAPI docs — disable in production
+
+```python
+# src/main.py
+docs_url = "/docs" if settings.LOG_LEVEL == "DEBUG" else None
+redoc_url = "/redoc" if settings.LOG_LEVEL == "DEBUG" else None
+
+app = FastAPI(
+    title="KomonBot",
+    root_path=settings.ROOT_PATH,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+)
+```
+
+### S6. Secrets management
+
+```env
+# .env — НЕ коммитить, добавить в .gitignore
+# В production использовать Docker secrets или environment variables через systemd/Docker Swarm
+```
+
+```yaml
+# docker-compose.yml — для production
+services:
+  app:
+    environment:
+      - DATABASE_URL            # pass via shell env, not .env file
+      - GHOST_ADMIN_API_KEY
+      - TELEGRAM_BOT_TOKEN
+```
+
+`.gitignore`:
+```
+.env
+*.env
+!.env.example
+```
+
+`.dockerignore`:
+```
+.env
+.git
+tests/
+bot.md
+*.md
+```
+
+---
+
+## Resilience & Operations
+
+### R1. Health check endpoint
+
+```python
+# api/router.py
+@router.get("/health")
+async def health(db: AsyncSession = Depends(get_db)):
+    """Liveness + readiness probe."""
+    try:
+        await db.execute(text("SELECT 1"))
+        return {"status": "ok", "db": "connected"}
+    except Exception:
+        raise HTTPException(503, "Database unavailable")
+```
+
+```yaml
+# docker-compose.yml — app service
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+```
+
+### R2. Ghost API retry + sync_pending
+
+```python
+# services/content_page.py
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+class ContentPageBuilder:
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    async def _push_to_ghost(self, page_id: str, html: str) -> None:
+        """PUT with retry. On final failure → log error, notify admins."""
+
+    async def sync_events_page(self) -> None:
+        try:
+            html = self.build_events_html(events)
+            await self._push_to_ghost(settings.GHOST_EVENTS_PAGE_ID, html)
+        except Exception:
+            logger.error("Ghost sync failed for events page after retries")
+            await self.notification_service.notify_admins(
+                "Ghost sync FAILED for events page. Manual check required."
+            )
+            # НЕ откатываем БД — данные в БД are source of truth.
+            # Ghost page will be stale until next successful sync.
+```
+
+> **При следующем успешном изменении** страница обновится полностью (full rebuild), поэтому "stale" состояние самоисправляется.
+
+### R3. PostgreSQL backups
+
+```yaml
+# docker-compose.yml — добавить сервис бэкапов
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    depends_on:
+      - db
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: komonbot
+      POSTGRES_USER: komonbot
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      SCHEDULE: "@daily"              # ежедневно
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups:/backups
+```
+
+Альтернатива — cron job на хосте:
+```bash
+# /etc/cron.d/komonbot-backup
+0 4 * * * root docker exec komonbot-db-1 pg_dump -U komonbot komonbot | gzip > /backups/komonbot-$(date +\%Y\%m\%d).sql.gz
+# retention: find /backups -name "*.sql.gz" -mtime +30 -delete
+```
+
+### R4. APScheduler — single instance guard
+
+```python
+# services/scheduler.py
+# Гарантия: Uvicorn запускается с --workers 1 (default).
+# Если в будущем нужно масштабировать — использовать advisory lock:
+
+async def auto_archive_events():
+    async with db_session() as session:
+        # PostgreSQL advisory lock prevents duplicate execution
+        result = await session.execute(text("SELECT pg_try_advisory_lock(1)"))
+        if not result.scalar():
+            return  # another worker already running this job
+        try:
+            # ... archive logic ...
+        finally:
+            await session.execute(text("SELECT pg_advisory_unlock(1)"))
+```
+
+В `docker-compose.yml` для uvicorn — явно 1 worker:
+```yaml
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+```
+
+### R5. Timezone
+
+```python
+# config.py
+TIMEZONE: str = "Europe/Moscow"
+
+# services/scheduler.py
+from zoneinfo import ZoneInfo
+
+tz = ZoneInfo(settings.TIMEZONE)
+
+scheduler.add_job(auto_archive_events, "cron", hour=3, minute=0, timezone=tz)
+scheduler.add_job(send_event_reminders, "cron", hour=10, minute=0, timezone=tz)
+```
+
+```python
+# В auto_archive:
+today = datetime.now(tz).date()
+# event_date < today — сравнение в локальном времени
+```
+
+### R6. Pagination
+
+```python
+# schemas/common.py
+class PaginationParams(BaseModel):
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=20, ge=1, le=100)   # max 100 per request
+
+# api/events.py
+@router.get("/api/events")
+async def list_events(
+    pagination: PaginationParams = Depends(),
+    status: EventStatus | None = None,
+    search: str | None = Query(default=None, max_length=100),
+):
+    ...
+```
+
+### R7. Graceful shutdown
+
+```python
+# src/main.py
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await setup_bot()
+    scheduler.start()
+    yield
+    # Shutdown
+    scheduler.shutdown(wait=True)     # wait for running jobs to finish
+    await bot.session.close()         # close aiogram http session
+    await engine.dispose()            # close DB connections
+```
+
+### R8. Admin seed on startup
+
+```python
+# src/main.py — inside lifespan startup
+async def seed_initial_admins(session: AsyncSession):
+    """Ensure ADMIN_TELEGRAM_IDS from env are in whitelist."""
+    for tg_id in settings.ADMIN_TELEGRAM_IDS:
+        existing = await session.execute(
+            select(WhitelistUser).where(WhitelistUser.telegram_id == tg_id)
+        )
+        if not existing.scalar_one_or_none():
+            session.add(WhitelistUser(
+                telegram_id=tg_id, role="admin", added_by=None
+            ))
+    await session.commit()
+```
+
+### R9. Request ID + structured logging
+
+```python
+# src/main.py — middleware
+import uuid
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    # inject into logging context (structlog / contextvars)
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+```
+
+```python
+# config logging
+import structlog
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+)
+```
+
+### R10. RBAC — editor vs admin
+
+Упростить: убрать `role` из `WhitelistUser`. Все в whitelist — admin.
+Если в будущем нужна гранулярность — добавить позже.
+
+```python
+# Сейчас: WhitelistUser.role удалить, все пользователи whitelist имеют полный доступ.
+# Меньше кода, меньше багов, YAGNI.
+```
+
+---
+
+## Engineering Decisions
+
+### E1. Transaction boundary: DB commit vs Ghost sync
+
+Проблема: `publish()` делает `status = PUBLISHED` в БД, потом `sync_events_page()`.
+Если Ghost sync fail'ится — статус уже в БД, но на сайте ничего не изменилось.
+
+Решение: **commit first, sync after** (current approach is correct).
+- БД = source of truth. Ghost = read-only projection.
+- Если Ghost упал → данные в БД корректны, Ghost обновится при следующей мутации.
+- НЕ делать rollback при Ghost failure — это создаст inconsistency с audit log.
+- Уведомление админу о failure достаточно (см. R2).
+
+### E2. Ghost sync serialization (race condition)
+
+Проблема: два быстрых PATCH подряд → два `sync_events_page()` запускаются параллельно →
+оба читают одинаковый `updated_at` → первый PUT проходит → второй получает 409 Conflict.
+
+Решение: `asyncio.Lock` на уровне `ContentPageBuilder`:
+
+```python
+class ContentPageBuilder:
+    def __init__(self):
+        self._events_lock = asyncio.Lock()
+        self._courses_lock = asyncio.Lock()
+
+    async def sync_events_page(self) -> None:
+        async with self._events_lock:    # serialize Ghost writes
+            events = await self.repo.get_published()
+            html = self.build_events_html(events)
+            await self._push_to_ghost(settings.GHOST_EVENTS_PAGE_ID, html)
+```
+
+При `--workers 1` этого достаточно. Lock гарантирует последовательный PUT.
+
+### E3. initData expiry vs long form sessions
+
+Проблема: `INIT_DATA_MAX_AGE = 600s` (10 мин). Админ открывает форму,
+заполняет 15 минут, жмёт "Сохранить" → 401 Expired.
+
+Решение: Web App при получении 401 вызывает `Telegram.WebApp.close()` +
+`Telegram.WebApp.openTelegramLink()` для re-open. Либо:
+
+```
+Frontend: при 401 → показать toast "Сессия истекла" →
+  Telegram.WebApp.close() → пользователь снова открывает Mini App.
+  Draft данные сохранять в localStorage, восстанавливать при re-open.
+```
+
+### E4. `description` поле Event — назначение
+
+`Event.description` не используется в Ghost HTML-карточке (там только title, location, date, time).
+Поле используется **только в Web App** для админа — дополнительная информация при просмотре/редактировании.
+Не выводится на сайт. Можно использовать как внутренние заметки.
+
+### E5. Currency symbol mapping
+
+`Course.currency` = `"RUB"` (ISO 4217), но в HTML шаблоне нужен символ `₽`.
+
+```python
+CURRENCY_SYMBOLS = {"RUB": "₽", "USD": "$", "EUR": "€"}
+
+def currency_symbol(code: str) -> str:
+    return CURRENCY_SYMBOLS.get(code, code)
+```
+
+### E6. "Узнать подробнее" — JS toggle на Ghost-странице
+
+Кнопка "Узнать подробнее" в карточке курса раскрывает `detailed_description`.
+Это требует **минимальный JS** на Ghost-странице (toggle visibility).
+
+Вариант: CSS-only через `<details>/<summary>`:
+
+```html
+<details class="cource-more">
+    <summary><button type="button">Узнать подробнее</button></summary>
+    <h4>Даты</h4>
+    <p>{schedule}</p>
+    <div><p>{detailed_description}</p></div>
+</details>
+```
+
+Преимущество: нет JS, работает нативно. Ghost не strip'ит `<details>`.
+
+### E7. Alembic auto-migration on startup
+
+```python
+# src/main.py — lifespan startup, BEFORE app ready
+from alembic.config import Config
+from alembic import command
+
+async def run_migrations():
+    """Run pending Alembic migrations on startup."""
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+```
+
+Или через Docker entrypoint:
+```dockerfile
+# Dockerfile
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]
+```
+
+```bash
+#!/bin/sh
+# entrypoint.sh
+set -e
+uv run alembic upgrade head
+exec uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+> Entrypoint подход лучше — миграция отрабатывает до запуска приложения,
+> нет race condition с healthcheck'ами.
+
+### E8. API error response format
+
+Стандартизировать формат ошибок для Web App:
+
+```python
+# schemas/common.py
+class ErrorResponse(BaseModel):
+    error: str           # machine-readable code: "validation_error", "not_found", "ghost_sync_failed"
+    message: str         # human-readable (можно на русском для Web App)
+    details: dict | None = None  # field-level errors for 422
+
+# api/deps.py — exception handlers
+@app.exception_handler(AppError)
+async def app_error_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ErrorResponse(error=exc.code, message=exc.message).model_dump()
+    )
+```
+
+### E9. Upload-image response — return URL
+
+```python
+# api/events.py
+@router.post("/api/events/{id}/upload-image", response_model=ImageUploadResponse)
+async def upload_event_image(...):
+    url = await ghost_client.upload_image(content, filename)
+    event.cover_image = url
+    await session.commit()
+    return ImageUploadResponse(url=url)  # client needs this!
+
+class ImageUploadResponse(BaseModel):
+    url: str
+```
+
+### E10. DELETE semantics
+
+Определить чётко:
+- `DELETE /api/events/{id}` → **hard delete** (удаление из БД). Разрешено только для DRAFT.
+- Для PUBLISHED/CANCELLED → сначала unpublish/archive, потом delete.
+- ARCHIVED можно удалить hard.
+- Триггерит Ghost page rebuild если сущность была PUBLISHED.
+
+```python
+async def delete(self, event_id: int, user_id: int) -> None:
+    event = await self.repo.get(event_id)
+    if event.status == EventStatus.PUBLISHED:
+        raise AppError(400, "unpublish_first", "Сначала снимите с публикации")
+    await self.repo.delete(event_id)
+    # rebuild Ghost if it was published before (status transitions matter)
+```
+
+### E11. Web App tech stack: Preact + HTM
+
+```
+webapp/
+├── index.html              # SPA entry point
+├── app.js                  # main app, router
+├── components/
+│   ├── event-list.js
+│   ├── event-form.js
+│   ├── course-list.js
+│   ├── course-form.js
+│   ├── contact-list.js
+│   ├── user-list.js
+│   └── common/
+│       ├── image-upload.js
+│       └── status-badge.js
+├── services/
+│   ├── api.js              # fetch wrapper with initData header
+│   └── auth.js             # Telegram.WebApp.initData extraction
+└── styles/
+    └── app.css             # Telegram WebApp theme variables
+```
+
+Без build step. CDN imports:
+```html
+<script type="module">
+  import { h, render } from 'https://esm.sh/preact';
+  import { useState } from 'https://esm.sh/preact/hooks';
+  import htm from 'https://esm.sh/htm';
+  const html = htm.bind(h);
+</script>
+```
+
+FastAPI serves static:
+```python
+app.mount("/webapp", StaticFiles(directory="webapp", html=True), name="webapp")
+```
+
+### E12. Dependency injection pattern
+
+```python
+# api/deps.py
+async def get_ghost_client() -> GhostClient:
+    return GhostClient(settings.GHOST_URL, settings.GHOST_ADMIN_API_KEY)
+
+async def get_content_page_builder(
+    session: AsyncSession = Depends(get_db),
+    ghost: GhostClient = Depends(get_ghost_client),
+    notification: NotificationService = Depends(get_notification_service),
+) -> ContentPageBuilder:
+    return ContentPageBuilder(
+        event_repo=EventRepository(session),
+        course_repo=CourseRepository(session),
+        ghost=ghost,
+        notification=notification,
+    )
+
+async def get_event_service(
+    session: AsyncSession = Depends(get_db),
+    builder: ContentPageBuilder = Depends(get_content_page_builder),
+    audit: AuditService = Depends(get_audit_service),
+) -> EventService:
+    return EventService(
+        repo=EventRepository(session),
+        content_page_builder=builder,
+        audit=audit,
+    )
+```
+
+Это позволяет мокать любой слой в тестах через `app.dependency_overrides`.
+
+### E13. Local development without Docker
+
+```bash
+# Quick start без Docker (нужен только PostgreSQL)
+uv sync
+cp .env.example .env                    # edit with local values
+uv run alembic upgrade head
+uv run uvicorn src.main:app --reload    # auto-reload on code changes
+```
+
+`.env.example` должен содержать все ключи с placeholder'ами.
+`--reload` flag — только для dev (не в Dockerfile).
+
+---
+
+## Updated Implementation Checklist (additions)
+
+### Phase 1 — Foundation (additions)
+- [ ] `.gitignore` + `.dockerignore` (exclude `.env`, secrets)
+- [ ] `TIMEZONE` config (Europe/Moscow)
+- [ ] Health check endpoint (`GET /health`)
+- [ ] Admin seed on startup from `ADMIN_TELEGRAM_IDS`
+- [ ] `entrypoint.sh` (alembic upgrade head + uvicorn)
+- [ ] `ErrorResponse` schema + global exception handlers
+- [ ] Currency symbol mapping (RUB → ₽)
+
+### Phase 2 — API Core (additions)
+- [ ] Pagination (`offset`/`limit` with max=100) for all list endpoints
+- [ ] initData expiry check (`auth_date` + MAX_AGE)
+- [ ] Disable OpenAPI docs in production
+- [ ] Request ID middleware + structured logging (structlog)
+- [ ] Image upload validation (magic bytes, MIME, size limit, no SVG)
+- [ ] Upload-image returns URL in response (`ImageUploadResponse`)
+- [ ] DELETE — hard delete only for DRAFT/ARCHIVED, reject for PUBLISHED
+- [ ] DI via `Depends()` — services get repos, ghost client, notification via injection
+
+### Phase 3 — Ghost Integration (additions)
+- [ ] `markupsafe.escape()` for all user input in HTML templates
+- [ ] `ticket_link` scheme validation (only http/https)
+- [ ] `tenacity` retry with exponential backoff for Ghost API
+- [ ] Notification on Ghost sync failure
+- [ ] Ghost `updated_at` conflict handling (409 → re-fetch + retry)
+- [ ] `asyncio.Lock` per page in ContentPageBuilder (serialize concurrent syncs)
+- [ ] Course card `<details>/<summary>` for "Узнать подробнее" (CSS-only, no JS)
+
+### Phase 4 — Telegram & Notifications (additions)
+- [ ] Webhook `secret_token` verification (X-Telegram-Bot-Api-Secret-Token)
+- [ ] Uvicorn `--workers 1` (explicit, for APScheduler)
+- [ ] Advisory lock guard for scheduler jobs
+- [ ] Timezone-aware scheduler (Europe/Moscow)
+- [ ] Graceful shutdown (scheduler, bot session, DB)
+
+### Phase 5 — Web App (additions)
+- [ ] Preact + HTM setup (CDN imports, no build step)
+- [ ] `api.js` — fetch wrapper with initData header, 401 → re-open Mini App
+- [ ] `localStorage` draft persistence (survive session re-open after 401)
+- [ ] Telegram theme variables in CSS (`var(--tg-theme-bg-color)`)
+- [ ] `app.mount("/webapp", StaticFiles(...))` in FastAPI
+
+### Phase 6 — Polish (additions)
+- [ ] PostgreSQL backup (docker service or cron)
+- [ ] `.env.example` with all keys documented (no real values)
+- [ ] Docker secrets for production deployment
+- [ ] `pg_dump` restore procedure documented
+- [ ] Local dev setup docs (uv sync, .env, uvicorn --reload)
