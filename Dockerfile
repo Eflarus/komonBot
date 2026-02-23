@@ -23,7 +23,7 @@ COPY --from=webapp-build /webapp/dist/ webapp/dist/
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data
+# Create data directories for SQLite and backups
+RUN mkdir -p /app/data /app/data/backups
 
 ENTRYPOINT ["./entrypoint.sh"]

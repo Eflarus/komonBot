@@ -27,12 +27,24 @@ class Settings(BaseSettings):
     ADMIN_TELEGRAM_IDS_STR: str = ""
     ALLOWED_ORIGINS_STR: str = ""
 
+    # Backups
+    BACKUP_DIR: str = "data/backups"
+    BACKUP_KEEP: int = 7
+    BACKUP_TELEGRAM_IDS_STR: str = ""
+
     @computed_field
     @property
     def ADMIN_TELEGRAM_IDS(self) -> list[int]:
         if not self.ADMIN_TELEGRAM_IDS_STR:
             return []
         return [int(x.strip()) for x in self.ADMIN_TELEGRAM_IDS_STR.split(",") if x.strip()]
+
+    @computed_field
+    @property
+    def BACKUP_TELEGRAM_IDS(self) -> list[int]:
+        if not self.BACKUP_TELEGRAM_IDS_STR:
+            return []
+        return [int(x.strip()) for x in self.BACKUP_TELEGRAM_IDS_STR.split(",") if x.strip()]
 
     @computed_field
     @property

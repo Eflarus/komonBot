@@ -67,6 +67,9 @@ All configuration via environment variables (`.env` file):
 | `TIMEZONE` | Timezone for scheduler (default: `Europe/Moscow`) |
 | `ADMIN_TELEGRAM_IDS_STR` | Comma-separated initial admin Telegram IDs |
 | `ALLOWED_ORIGINS_STR` | Comma-separated CORS origins |
+| `BACKUP_DIR` | Backup directory (default: `data/backups`) |
+| `BACKUP_KEEP` | Number of backups to keep (default: `7`) |
+| `BACKUP_TELEGRAM_IDS_STR` | Comma-separated Telegram IDs to receive backup files (every 48h) |
 
 ## API
 
@@ -107,7 +110,7 @@ Screens: Main menu → Events (list/create/edit) → Courses (list/create/edit) 
 ## Testing
 
 ```bash
-uv run pytest tests/ -v                              # run all 58 tests
+uv run pytest tests/ -v                              # run all 68 tests
 uv run pytest tests/ -v --cov=src --cov-report=term  # with coverage
 ```
 

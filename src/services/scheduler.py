@@ -60,7 +60,9 @@ async def send_event_reminders(notification_service=None):
                 logger.exception("Failed to send reminder", event_id=event.id)
 
 
-def create_scheduler(content_page_builder=None, notification_service=None) -> AsyncIOScheduler:
+def create_scheduler(
+    content_page_builder=None, notification_service=None, bot=None,
+) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=tz)
 
     scheduler.add_job(
@@ -79,5 +81,28 @@ def create_scheduler(content_page_builder=None, notification_service=None) -> As
         kwargs={"notification_service": notification_service},
         id="send_event_reminders",
     )
+
+    # Daily backup with rotation at 04:00
+    from src.services.backup import run_backup
+
+    scheduler.add_job(
+        run_backup,
+        "cron",
+        hour=4,
+        minute=0,
+        id="daily_backup",
+    )
+
+    # Send backup to Telegram every 48 hours at 05:00
+    if bot and settings.BACKUP_TELEGRAM_IDS:
+        from src.services.backup import send_backup_to_telegram
+
+        scheduler.add_job(
+            send_backup_to_telegram,
+            "interval",
+            hours=48,
+            kwargs={"bot": bot},
+            id="send_backup_telegram",
+        )
 
     return scheduler

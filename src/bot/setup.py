@@ -20,8 +20,10 @@ async def setup_bot() -> None:
         logger.warning("TELEGRAM_BOT_TOKEN not set, skipping bot setup")
         return
 
+    from src.bot.handlers.backup import router as backup_router
     from src.bot.handlers.start import router as start_router
 
+    dp.include_router(backup_router)
     dp.include_router(start_router)
 
     await bot.set_chat_menu_button(

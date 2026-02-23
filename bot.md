@@ -6,7 +6,7 @@
 Архитектура: **FastAPI backend** + **Telegram Web App** (Mini App) + **Ghost CMS** интеграция.
 
 Обычный Telegram-бот **не используется** — вся работа через Web App интерфейс.
-Telegram используется только для: запуска Mini App, push-уведомлений, нотификаций о заявках.
+Telegram используется только для: запуска Mini App, push-уведомлений, нотификаций о заявках, отправки бэкапов.
 
 **Деплой**: сервис работает на **конфигурируемом саброуте** основного Ghost-сайта
 (например `https://komon.tot.pub/bot/`). Ghost и бэкенд живут за одним доменом,
@@ -88,7 +88,8 @@ komonBot/
 │   │   ├── ghost.py            # Ghost CMS client (upload images, update pages)
 │   │   ├── content_page.py     # Ghost content page builder (events page, courses page)
 │   │   ├── notification.py     # Telegram notification sender
-│   │   ├── scheduler.py        # APScheduler tasks (reminders, auto-archive)
+│   │   ├── scheduler.py        # APScheduler tasks (reminders, auto-archive, backup)
+│   │   ├── backup.py           # SQLite backup with rotation + Telegram delivery
 │   │   └── audit.py            # Audit logging service
 │   ├── api/
 │   │   ├── __init__.py
@@ -104,7 +105,8 @@ komonBot/
 │   │   ├── setup.py            # Bot instance, dispatcher, webhook registration
 │   │   ├── handlers/
 │   │   │   ├── __init__.py
-│   │   │   └── start.py        # /start command — opens Web App
+│   │   │   ├── start.py        # /start command — opens Web App
+│   │   │   └── backup.py       # /backup command — sends fresh DB backup
 │   │   └── middlewares/
 │   │       ├── __init__.py
 │   │       └── auth.py         # whitelist check middleware
@@ -407,6 +409,8 @@ initData expires after 10 minutes (`INIT_DATA_MAX_AGE = 600`).
 ### Scheduler tasks:
 - **auto_archive_events** — daily 03:00 (Europe/Moscow), archives past events
 - **send_event_reminders** — daily 10:00, notifies admins about tomorrow's events
+- **daily_backup** — daily 04:00, SQLite backup via `sqlite3.Connection.backup()` + rotation (keep last `BACKUP_KEEP`)
+- **send_backup_telegram** — every 48 hours, sends backup file to `BACKUP_TELEGRAM_IDS` via Telegram
 
 ---
 
@@ -553,6 +557,11 @@ LOG_LEVEL=INFO
 TIMEZONE=Europe/Moscow
 ADMIN_TELEGRAM_IDS_STR=123456789,987654321
 ALLOWED_ORIGINS_STR=https://komon.tot.pub
+
+# Backups
+BACKUP_DIR=data/backups
+BACKUP_KEEP=7
+BACKUP_TELEGRAM_IDS_STR=123456789
 ```
 
 Computed (derived automatically):
@@ -560,6 +569,7 @@ Computed (derived automatically):
 - `WEBHOOK_URL = {PUBLIC_URL}/webhook/telegram`
 - `ADMIN_TELEGRAM_IDS` — parsed from CSV
 - `ALLOWED_ORIGINS` — parsed from CSV
+- `BACKUP_TELEGRAM_IDS` — parsed from CSV
 
 ---
 
@@ -693,7 +703,7 @@ Swagger/ReDoc only available when `LOG_LEVEL=DEBUG`.
 
 ## Testing
 
-58 tests across all layers:
+68 tests across all layers:
 
 | Area | File | Tests |
 |------|------|-------|
@@ -704,6 +714,7 @@ Swagger/ReDoc only available when `LOG_LEVEL=DEBUG`.
 | Contacts API | `test_api/test_contacts.py` | 9 (submit, honeypot, validation, admin) |
 | Users API | `test_api/test_users.py` | 7 (list, add, delete, self-removal) |
 | Content page | `test_services/test_content_page.py` | 10 (HTML output, XSS escaping) |
+| Backup | `test_services/test_backup.py` | 10 (create, rotate, send, errors) |
 
 ```bash
 uv run pytest tests/ -v

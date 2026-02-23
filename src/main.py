@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
     # Start scheduler
     from src.services.scheduler import create_scheduler
 
-    scheduler = create_scheduler(content_page_builder, notification_service)
+    scheduler = create_scheduler(content_page_builder, notification_service, bot)
     scheduler.start()
 
     yield
