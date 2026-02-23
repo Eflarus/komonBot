@@ -20,10 +20,11 @@ from src.config import settings
 from src.database import Base, get_db
 from src.main import app
 
-# NullPool avoids asyncpg "another operation in progress" errors
-# by giving each checkout a brand-new connection.
 test_engine = create_async_engine(
-    settings.DATABASE_URL, echo=False, poolclass=NullPool,
+    settings.DATABASE_URL,
+    echo=False,
+    poolclass=NullPool,
+    connect_args={"check_same_thread": False},
 )
 test_session_factory = async_sessionmaker(test_engine, expire_on_commit=False)
 
@@ -42,7 +43,8 @@ async def _truncate_tables(_create_tables):
     """Truncate all tables before each test for isolation."""
     async with test_engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(text(f"TRUNCATE TABLE {table.name} CASCADE"))
+            await conn.execute(text(f"DELETE FROM {table.name}"))
+
     yield
 
 

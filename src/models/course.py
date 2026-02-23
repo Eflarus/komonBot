@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Numeric, String, Text, func
+from sqlalchemy import Numeric, String, Text, text
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,11 +29,13 @@ class Course(Base):
     cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     currency: Mapped[str] = mapped_column(String(3), default="RUB")
     status: Mapped[CourseStatus] = mapped_column(
-        SQLEnum(CourseStatus), default=CourseStatus.DRAFT
+        SQLEnum(CourseStatus, native_enum=False, length=20), default=CourseStatus.DRAFT
     )
     order: Mapped[int] = mapped_column(default=0)
-    created_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP")
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        server_default=text("CURRENT_TIMESTAMP"), onupdate=datetime.now
     )

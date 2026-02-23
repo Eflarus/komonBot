@@ -22,7 +22,7 @@ Nginx проксирует саброут на FastAPI.
 | Package manager | uv (backend), pnpm (webapp) |
 | Web framework | FastAPI + Uvicorn |
 | ORM | SQLAlchemy 2.0 (async, mapped_column) |
-| Database | PostgreSQL 16 (asyncpg) |
+| Database | SQLite (aiosqlite, WAL mode) |
 | Migrations | Alembic |
 | Telegram Bot API | aiogram 3.x (webhook + Mini App launch only) |
 | Telegram Web App | Preact + TypeScript + Vite (JSX/TSX, build step) |
@@ -59,7 +59,7 @@ komonBot/
 │   ├── __init__.py
 │   ├── main.py                 # FastAPI app factory, lifespan, middleware
 │   ├── config.py               # pydantic Settings (env vars)
-│   ├── database.py             # async engine, sessionmaker, Base
+│   ├── database.py             # async engine, sessionmaker, Base, SQLite WAL pragma
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── event.py            # Event model + EventStatus enum
@@ -183,12 +183,14 @@ class Event(Base):
     cover_image: Mapped[str | None] = mapped_column(String(500))
     ticket_link: Mapped[str | None] = mapped_column(String(500))
     status: Mapped[EventStatus] = mapped_column(
-        SQLEnum(EventStatus), default=EventStatus.DRAFT
+        SQLEnum(EventStatus, native_enum=False, length=20), default=EventStatus.DRAFT
     )
     order: Mapped[int] = mapped_column(default=0)
-    created_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    created_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP"), onupdate=datetime.now
+    )
 ```
 
 ### Course
@@ -213,12 +215,14 @@ class Course(Base):
     cost: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="RUB")
     status: Mapped[CourseStatus] = mapped_column(
-        SQLEnum(CourseStatus), default=CourseStatus.DRAFT
+        SQLEnum(CourseStatus, native_enum=False, length=20), default=CourseStatus.DRAFT
     )
     order: Mapped[int] = mapped_column(default=0)
-    created_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    created_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP"), onupdate=datetime.now
+    )
 ```
 
 ### WhitelistUser
@@ -228,12 +232,12 @@ class WhitelistUser(Base):
     __tablename__ = "whitelist_users"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    telegram_id: Mapped[int] = mapped_column(unique=True, index=True)
     username: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
-    added_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    added_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
 ```
 
 ### ContactMessage
@@ -249,8 +253,8 @@ class ContactMessage(Base):
     message: Mapped[str] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(String(50))
     is_processed: Mapped[bool] = mapped_column(default=False)
-    processed_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    processed_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     processed_at: Mapped[datetime | None] = mapped_column()
 ```
 
@@ -261,12 +265,12 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(index=True)
     action: Mapped[str] = mapped_column(String(50))
     entity_type: Mapped[str] = mapped_column(String(50))
     entity_id: Mapped[int] = mapped_column()
     changes: Mapped[str | None] = mapped_column(Text)    # JSON diff
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
 ```
 
 ---
@@ -401,7 +405,7 @@ initData expires after 10 minutes (`INIT_DATA_MAX_AGE = 600`).
 6. On final failure → notify admins, keep DB as source of truth
 
 ### Scheduler tasks:
-- **auto_archive_events** — daily 03:00 (Europe/Moscow), advisory lock, archives past events
+- **auto_archive_events** — daily 03:00 (Europe/Moscow), archives past events
 - **send_event_reminders** — daily 10:00, notifies admins about tomorrow's events
 
 ---
@@ -526,8 +530,8 @@ interface PaginatedResponse<T> { items: T[], total: number }
 ## Configuration (`.env`)
 
 ```env
-# Database
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/komonbot
+# Database (SQLite — file path relative to working directory)
+DATABASE_URL=sqlite+aiosqlite:///data/komonbot.db
 
 # App — subroute
 ROOT_PATH=/bot
@@ -549,9 +553,6 @@ LOG_LEVEL=INFO
 TIMEZONE=Europe/Moscow
 ADMIN_TELEGRAM_IDS_STR=123456789,987654321
 ALLOWED_ORIGINS_STR=https://komon.tot.pub
-
-# Docker Compose
-DB_PASSWORD=change-me-in-production
 ```
 
 Computed (derived automatically):
@@ -578,6 +579,7 @@ RUN pnpm build
 # Stage 2: Python app
 FROM python:3.12-slim
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
@@ -586,6 +588,7 @@ COPY --from=webapp-build /webapp/dist/ webapp/dist/
 COPY webapp/styles/ webapp/styles/
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
+RUN mkdir -p /app/data
 ENTRYPOINT ["./entrypoint.sh"]
 ```
 
@@ -598,9 +601,8 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     env_file: .env
-    depends_on:
-      db:
-        condition: service_healthy
+    volumes:
+      - dbdata:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -608,22 +610,8 @@ services:
       retries: 3
       start_period: 10s
 
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: komonbot
-      POSTGRES_USER: komonbot
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U komonbot"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
 volumes:
-  pgdata:
+  dbdata:
 ```
 
 ### entrypoint.sh
@@ -727,9 +715,9 @@ uv run pytest tests/ -v --cov=src --cov-report=term-missing
 ## Key Design Decisions
 
 1. **SQLAlchemy 2.0 mapped_column** — type safety, IDE support
-2. **BigInteger for telegram_id** — TG user IDs can exceed 32-bit int
+2. **SQLite** — zero-config embedded DB, WAL mode for concurrent reads, no external service needed
 3. **Decimal for cost** — accurate financial values
-4. **Enum status** — explicit lifecycle instead of boolean flags
+4. **Enum as VARCHAR** — `native_enum=False` for SQLite compatibility, stored as `String(20)`
 5. **No ghost_post_id** — content lives in two Ghost pages, rebuilt entirely on each change
 6. **Audit log** — separate table with JSON diff, not revision history
 7. **Pre-generated HTML** — no JS on Ghost pages; backend rebuilds and pushes HTML

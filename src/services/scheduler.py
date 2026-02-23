@@ -3,7 +3,6 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import text
 
 from src.config import settings
 from src.database import async_session_factory
@@ -19,35 +18,27 @@ tz = ZoneInfo(settings.TIMEZONE)
 async def auto_archive_events(content_page_builder=None):
     """Archive published events with past dates. Runs daily at 03:00."""
     async with async_session_factory() as session:
-        # Advisory lock to prevent duplicate execution
-        result = await session.execute(text("SELECT pg_try_advisory_lock(1)"))
-        if not result.scalar():
+        repo = EventRepository(session)
+        audit = AuditService(session)
+        today = datetime.now(tz).date()
+
+        past_events = await repo.get_past_published(today)
+        if not past_events:
             return
 
-        try:
-            repo = EventRepository(session)
-            audit = AuditService(session)
-            today = datetime.now(tz).date()
+        for event in past_events:
+            await repo.update(event, status=EventStatus.ARCHIVED)
+            await audit.log(0, "auto_archive", "event", event.id)
 
-            past_events = await repo.get_past_published(today)
-            if not past_events:
-                return
+        await session.commit()
+        logger.info("Auto-archived events", count=len(past_events))
 
-            for event in past_events:
-                await repo.update(event, status=EventStatus.ARCHIVED)
-                await audit.log(0, "auto_archive", "event", event.id)
-
-            await session.commit()
-            logger.info("Auto-archived events", count=len(past_events))
-
-            # Rebuild Ghost page
-            if content_page_builder:
-                try:
-                    await content_page_builder.sync_events_page()
-                except Exception:
-                    logger.exception("Ghost sync failed after auto-archive")
-        finally:
-            await session.execute(text("SELECT pg_advisory_unlock(1)"))
+        # Rebuild Ghost page
+        if content_page_builder:
+            try:
+                await content_page_builder.sync_events_page()
+            except Exception:
+                logger.exception("Ghost sync failed after auto-archive")
 
 
 async def send_event_reminders(notification_service=None):

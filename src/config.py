@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://komonbot:password@localhost:5432/komonbot"
+    DATABASE_URL: str = "sqlite+aiosqlite:///data/komonbot.db"
 
     # App — subroute
     ROOT_PATH: str = "/bot"
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         """Synchronous DB URL for Alembic migrations."""
-        return self.DATABASE_URL.replace("asyncpg", "psycopg2")
+        return self.DATABASE_URL.replace("sqlite+aiosqlite", "sqlite")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

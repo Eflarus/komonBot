@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime, time
 
-from sqlalchemy import BigInteger, Date, String, Text, Time, func
+from sqlalchemy import Date, String, Text, Time, text
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,11 +27,13 @@ class Event(Base):
     cover_image: Mapped[str | None] = mapped_column(String(500))
     ticket_link: Mapped[str | None] = mapped_column(String(500))
     status: Mapped[EventStatus] = mapped_column(
-        SQLEnum(EventStatus), default=EventStatus.DRAFT
+        SQLEnum(EventStatus, native_enum=False, length=20), default=EventStatus.DRAFT
     )
     order: Mapped[int] = mapped_column(default=0)
-    created_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP")
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        server_default=text("CURRENT_TIMESTAMP"), onupdate=datetime.now
     )

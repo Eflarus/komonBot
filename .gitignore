@@ -41,6 +41,9 @@ backups/
 # uv
 .python-version
 
+# Database
+data/
+
 # Webapp
 webapp/node_modules/
 webapp/dist/

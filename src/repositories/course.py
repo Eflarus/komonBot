@@ -25,8 +25,8 @@ class CourseRepository(BaseRepository[Course]):
 
         if search:
             pattern = f"%{search}%"
-            base = base.where(Course.title.ilike(pattern))
-            count_base = count_base.where(Course.title.ilike(pattern))
+            base = base.where(Course.title.like(pattern))
+            count_base = count_base.where(Course.title.like(pattern))
 
         total = (await self.session.execute(count_base)).scalar() or 0
 

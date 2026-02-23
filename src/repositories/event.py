@@ -27,8 +27,8 @@ class EventRepository(BaseRepository[Event]):
 
         if search:
             pattern = f"%{search}%"
-            base = base.where(Event.title.ilike(pattern))
-            count_base = count_base.where(Event.title.ilike(pattern))
+            base = base.where(Event.title.like(pattern))
+            count_base = count_base.where(Event.title.like(pattern))
 
         total = (await self.session.execute(count_base)).scalar() or 0
 

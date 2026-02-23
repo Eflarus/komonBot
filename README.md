@@ -4,7 +4,7 @@ Telegram Web App + FastAPI backend + Ghost CMS integration for managing events a
 
 ## Architecture
 
-- **Backend**: FastAPI (async) with SQLAlchemy 2.0, PostgreSQL, Alembic migrations
+- **Backend**: FastAPI (async) with SQLAlchemy 2.0, SQLite (WAL mode), Alembic migrations
 - **Frontend**: Preact + TypeScript Mini App (Vite build), served as static files
 - **Bot**: aiogram 3.x — webhook only, launches the Mini App
 - **CMS**: Ghost Admin API — backend pushes pre-rendered HTML to Ghost pages
@@ -19,7 +19,6 @@ All admin operations happen through the Telegram Mini App. The bot itself only h
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 22+ with pnpm
-- PostgreSQL 16
 
 ### Local Development
 
@@ -54,7 +53,7 @@ All configuration via environment variables (`.env` file):
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string (asyncpg) |
+| `DATABASE_URL` | SQLite connection string (`sqlite+aiosqlite:///data/komonbot.db`) |
 | `ROOT_PATH` | Subroute prefix (e.g., `/bot`) |
 | `PUBLIC_URL` | Full public base URL (e.g., `https://komon.tot.pub/bot`) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |

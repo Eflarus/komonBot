@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, String, Text, func
+from sqlalchemy import String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database import Base
@@ -16,6 +16,8 @@ class ContactMessage(Base):
     message: Mapped[str] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(String(50))
     is_processed: Mapped[bool] = mapped_column(default=False)
-    processed_by: Mapped[int | None] = mapped_column(BigInteger)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    processed_by: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP")
+    )
     processed_at: Mapped[datetime | None] = mapped_column()
