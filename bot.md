@@ -608,11 +608,15 @@ ENTRYPOINT ["./entrypoint.sh"]
 services:
   app:
     build: .
-    ports:
-      - "127.0.0.1:8000:8000"
+    container_name: komonbot
+    restart: unless-stopped
+    expose:
+      - "8000"
     env_file: .env
     volumes:
       - dbdata:/app/data
+    networks:
+      - intranet
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -622,7 +626,14 @@ services:
 
 volumes:
   dbdata:
+
+networks:
+  intranet:
+    external: true
 ```
+
+Контейнер подключается к внешней Docker-сети `intranet`, где живёт Nginx.
+Порт 8000 не публикуется на хост — доступен только внутри сети по имени `komonbot`.
 
 ### entrypoint.sh
 
@@ -638,6 +649,7 @@ exec uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
 ## Reverse Proxy & Subroute
 
 Service runs behind Nginx on a configurable subroute of the Ghost site.
+Both Nginx and KomonBot live in the same Docker network (`intranet`).
 FastAPI uses `root_path` for correct OpenAPI docs and URL generation.
 
 ### URL structure (example: `ROOT_PATH=/bot`)
@@ -653,11 +665,11 @@ https://komon.tot.pub/bot/webapp/       ← Telegram Mini App (static)
 https://komon.tot.pub/bot/docs          ← OpenAPI Swagger UI (DEBUG only)
 ```
 
-### Nginx config
+### Nginx config (inside the `server` block for the domain)
 
 ```nginx
 location /bot/ {
-    proxy_pass http://127.0.0.1:8000/;
+    proxy_pass http://komonbot:8000/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -668,6 +680,8 @@ location /bot/ {
     client_max_body_size 10M;
 }
 ```
+
+`komonbot` — имя контейнера, резолвится через Docker DNS внутри сети `intranet`.
 
 ---
 

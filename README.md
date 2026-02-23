@@ -116,11 +116,11 @@ uv run pytest tests/ -v --cov=src --cov-report=term  # with coverage
 
 ## Deployment
 
-The service is designed to run behind Nginx on a subroute of a Ghost site:
+The service runs in Docker on a shared `intranet` network with Nginx, proxied on a subroute of a Ghost site:
 
 ```nginx
 location /bot/ {
-    proxy_pass http://127.0.0.1:8000/;
+    proxy_pass http://komonbot:8000/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
