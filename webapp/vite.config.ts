@@ -3,7 +3,7 @@ import preact from "@preact/preset-vite";
 
 export default defineConfig({
   plugins: [preact()],
-  base: "/webapp/",
+  base: "./",
   server: {
     proxy: {
       "/api": "http://localhost:8000",
