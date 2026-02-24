@@ -32,10 +32,18 @@ class GhostClient:
         data = response.json()
         return data["images"][0]["url"]
 
+    @staticmethod
+    def _is_ghost_id(value: str) -> bool:
+        """Ghost IDs are 24-char hex strings (MongoDB ObjectId)."""
+        return len(value) == 24 and all(c in "0123456789abcdef" for c in value)
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def get_page(self, page_id: str) -> dict:
-        """Get page by ID (needed for updated_at for concurrent updates)."""
-        url = f"{self.api_base}/pages/{page_id}/"
+        """Get page by ID or slug (needed for updated_at for concurrent updates)."""
+        if self._is_ghost_id(page_id):
+            url = f"{self.api_base}/pages/{page_id}/"
+        else:
+            url = f"{self.api_base}/pages/slug/{page_id}/"
         response = await self._client.get(url, headers=self._auth_headers())
         response.raise_for_status()
         data = response.json()
@@ -44,11 +52,12 @@ class GhostClient:
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def update_page_html(self, page_id: str, html: str) -> None:
         """Replace full HTML content of a Ghost page via PUT /pages/{id}."""
-        # First get current updated_at to prevent conflicts
+        # First get current page (resolves slug → real ID + updated_at)
         page = await self.get_page(page_id)
+        real_id = page["id"]
         updated_at = page["updated_at"]
 
-        url = f"{self.api_base}/pages/{page_id}/"
+        url = f"{self.api_base}/pages/{real_id}/"
         payload = {
             "pages": [
                 {
@@ -63,7 +72,7 @@ class GhostClient:
             json=payload,
         )
         response.raise_for_status()
-        logger.info("Ghost page updated", page_id=page_id)
+        logger.info("Ghost page updated", page_id=real_id)
 
     async def close(self) -> None:
         await self._client.aclose()
