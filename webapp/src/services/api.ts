@@ -4,6 +4,14 @@ function getInitData(): string {
   return tg?.initData || "";
 }
 
+function getApiBase(): string {
+  // Derive API prefix from current page URL
+  // e.g. /bot179654/webapp/ → /bot179654/api
+  const path = window.location.pathname;
+  const idx = path.indexOf("/webapp");
+  return (idx > 0 ? path.substring(0, idx) : "") + "/api";
+}
+
 interface RequestOptions {
   body?: unknown;
   isFormData?: boolean;
@@ -26,7 +34,7 @@ async function request<T>(
     opts.body = isFormData ? (body as FormData) : JSON.stringify(body);
   }
 
-  const res = await fetch(`/api${path}`, opts);
+  const res = await fetch(`${getApiBase()}${path}`, opts);
 
   if (res.status === 401) {
     if (tg) {

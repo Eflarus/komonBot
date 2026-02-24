@@ -107,6 +107,7 @@ app = FastAPI(
     docs_url=docs_url,
     redoc_url=redoc_url,
     lifespan=lifespan,
+    
 )
 
 # Rate limiting
