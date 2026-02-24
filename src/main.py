@@ -104,7 +104,6 @@ redoc_url = "/redoc" if settings.LOG_LEVEL == "DEBUG" else None
 
 app = FastAPI(
     title="KomonBot",
-    root_path=settings.ROOT_PATH,
     docs_url=docs_url,
     redoc_url=redoc_url,
     lifespan=lifespan,
