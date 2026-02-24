@@ -86,7 +86,12 @@ export function CourseForm({ id, onNavigate, onToast }: CourseFormProps) {
   const save = async () => {
     setSaving(true);
     try {
-      const payload = { ...form, cost: parseFloat(form.cost) || 0 };
+      const payload = {
+        ...form,
+        cost: parseFloat(form.cost) || 0,
+        detailed_description: form.detailed_description || null,
+        order: Number(form.order) || 0,
+      };
       if (isNew) {
         const data = await api.post<Course>("/courses", payload);
         clearDraft();

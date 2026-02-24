@@ -28,9 +28,34 @@ function navigate(path: string) {
   window.location.hash = path;
 }
 
+function goBack(parts: string[]) {
+  if (parts.length <= 1) {
+    navigate("/");
+  } else if (
+    parts.length === 2 &&
+    (parts[1] === "new" || !isNaN(Number(parts[1])))
+  ) {
+    navigate("/" + parts[0]);
+  } else {
+    navigate("/" + parts.slice(0, -1).join("/"));
+  }
+}
+
 function App() {
   const [route, setRoute] = useState<Route>(parseRoute());
   const [toast, setToast] = useState<string | null>(null);
+
+  // Auth: require Telegram environment
+  if (!tg?.initData) {
+    return (
+      <div className="app">
+        <div className="page" style={{ textAlign: "center", paddingTop: "3rem" }}>
+          <h2>Доступ запрещён</h2>
+          <p>Откройте приложение через Telegram-бот.</p>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const onHash = () => setRoute(parseRoute());
@@ -38,26 +63,14 @@ function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // Back button handling
+  // Telegram Back button
   useEffect(() => {
     if (!tg) return;
     if (route.path === "/" || route.path === "") {
       tg.BackButton.hide();
     } else {
       tg.BackButton.show();
-      const handler = () => {
-        const { parts } = route;
-        if (parts.length <= 1) {
-          navigate("/");
-        } else if (
-          parts.length === 2 &&
-          (parts[1] === "new" || !isNaN(Number(parts[1])))
-        ) {
-          navigate("/" + parts[0]);
-        } else {
-          navigate("/" + parts.slice(0, -1).join("/"));
-        }
-      };
+      const handler = () => goBack(route.parts);
       tg.BackButton.onClick(handler);
       return () => tg.BackButton.offClick(handler);
     }
@@ -65,6 +78,7 @@ function App() {
 
   const showToast = (msg: string) => setToast(msg);
   const { parts } = route;
+  const isSubPage = parts.length > 0;
 
   let content;
   if (parts[0] === "events") {
@@ -101,6 +115,11 @@ function App() {
 
   return (
     <div className="app">
+      {isSubPage && (
+        <button className="back-btn" onClick={() => goBack(parts)}>
+          ← Назад
+        </button>
+      )}
       {content}
       <Toast message={toast} onClose={() => setToast(null)} />
     </div>

@@ -105,6 +105,45 @@ class TestEventLifecycle:
         assert resp.status_code == 400
 
 
+class TestEventValidation:
+    async def test_create_with_null_optional_fields(self, client, auth_headers):
+        """Webapp sends null for empty date/time/ticket_link — should not 422."""
+        resp = await client.post(
+            "/api/events",
+            json={
+                "title": "Minimal Event",
+                "event_date": None,
+                "event_time": None,
+                "ticket_link": None,
+                "order": 0,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["title"] == "Minimal Event"
+        assert data["event_date"] is None
+        assert data["event_time"] is None
+        assert data["ticket_link"] is None
+
+    async def test_create_with_only_title(self, client, auth_headers):
+        """Minimum valid payload: just title."""
+        resp = await client.post(
+            "/api/events",
+            json={"title": "Title Only"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+
+    async def test_create_rejects_empty_title(self, client, auth_headers):
+        resp = await client.post(
+            "/api/events",
+            json={"title": ""},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+
 class TestEventAuth:
     async def test_no_auth_header(self, client):
         resp = await client.get("/api/events")

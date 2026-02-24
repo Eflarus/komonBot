@@ -84,13 +84,20 @@ export function EventForm({ id, onNavigate, onToast }: EventFormProps) {
   const save = async () => {
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        event_date: form.event_date || null,
+        event_time: form.event_time || null,
+        ticket_link: form.ticket_link || null,
+        order: Number(form.order) || 0,
+      };
       if (isNew) {
-        const data = await api.post<Event>("/events", form);
+        const data = await api.post<Event>("/events", payload);
         clearDraft();
         onToast("Мероприятие создано");
         onNavigate(`/events/${data.id}`);
       } else {
-        await api.patch(`/events/${id}`, form);
+        await api.patch(`/events/${id}`, payload);
         onToast("Сохранено");
       }
     } catch (e) {

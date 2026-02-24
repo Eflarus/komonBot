@@ -77,6 +77,24 @@ body {
     font-size: 28px;
 }
 
+/* Back button */
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 0;
+    margin-bottom: 4px;
+    border: none;
+    background: none;
+    color: var(--link);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.back-btn:active {
+    opacity: 0.6;
+}
+
 /* Page */
 .page {
     padding: 4px 0;
