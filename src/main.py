@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -151,6 +151,15 @@ from src.api.webhook import router as webhook_router  # noqa: E402
 
 app.include_router(router)
 app.include_router(webhook_router)
+
+# Redirect /webapp → /webapp/ with correct root_path prefix
+# (Starlette's StaticFiles redirect doesn't include root_path in Location header)
+@app.get("/webapp")
+async def webapp_trailing_slash():
+    return RedirectResponse(
+        url=f"{settings.ROOT_PATH}/webapp/", status_code=307,
+    )
+
 
 # Static files (webapp)
 app.mount("/webapp", StaticFiles(directory="webapp/dist", html=True), name="webapp")

@@ -121,6 +121,7 @@ The service runs in Docker on a shared `intranet` network with Nginx, proxied on
 ```nginx
 location /bot/ {
     proxy_pass http://komonbot:8000/;
+    proxy_redirect / /bot/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

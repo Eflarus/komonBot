@@ -670,6 +670,7 @@ https://komon.tot.pub/bot/docs          ← OpenAPI Swagger UI (DEBUG only)
 ```nginx
 location /bot/ {
     proxy_pass http://komonbot:8000/;
+    proxy_redirect / /bot/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -681,7 +682,8 @@ location /bot/ {
 }
 ```
 
-`komonbot` — имя контейнера, резолвится через Docker DNS внутри сети `intranet`.
+- `komonbot` — имя контейнера, резолвится через Docker DNS внутри сети `intranet`
+- `proxy_redirect / /bot/` — перезаписывает `Location`-заголовки в ответах, чтобы внутренние редиректы (напр. `/webapp` → `/webapp/`) получали правильный префикс
 
 ---
 
