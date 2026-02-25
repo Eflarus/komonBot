@@ -58,6 +58,14 @@ def _safe_url(url: str | None) -> str | None:
     return url
 
 
+def _format_title_html(title: str) -> str:
+    """Split title by newlines into <span><br><span> pairs matching Ghost card format."""
+    parts = str(escape(title)).split("\n")
+    return "<br>".join(
+        f'<span style="white-space: pre-wrap;">{p}</span>' for p in parts
+    )
+
+
 class ContentPageBuilder:
     """Builds HTML from published entities and pushes to Ghost pages."""
 
@@ -83,7 +91,7 @@ class ContentPageBuilder:
 
     def _render_event_card(self, event: Event) -> str:
         """Single event -> kg-product-card HTML. All user input escaped."""
-        title = escape(event.title)
+        title_html = _format_title_html(event.title)
         location = escape(event.location)
         date_formatted = escape(_format_date_ru(event.event_date))
         time_formatted = escape(_format_time(event.event_time))
@@ -114,9 +122,7 @@ class ContentPageBuilder:
             f'    <div class="kg-product-card-container">\n'
             f"{image_html}\n"
             f'        <div class="kg-product-card-title-container">\n'
-            f'            <h4 class="kg-product-card-title">\n'
-            f'                <span style="white-space: pre-wrap;">{title}</span>\n'
-            f"            </h4>\n"
+            f'            <h4 class="kg-product-card-title">{title_html}</h4>\n'
             f"        </div>\n"
             f'        <div class="kg-product-card-description">\n'
             f"            <p>\n"
@@ -133,6 +139,7 @@ class ContentPageBuilder:
     def _render_course_card(self, course: Course) -> str:
         """Single course -> cource-card HTML. All user input escaped."""
         title = escape(course.title)
+        title_html = _format_title_html(course.title)
         description = escape(course.description)
         schedule = escape(course.schedule)
         cost = escape(str(course.cost))
@@ -159,7 +166,7 @@ class ContentPageBuilder:
             f"{mobile_img}\n"
             f'    <span class="price">{cost} {symbol}</span>\n'
             f'    <div class="cource-desc">\n'
-            f'        <h3 class="cource-header">{title}</h3>\n'
+            f'        <h3 class="cource-header">{title_html}</h3>\n'
             f'        <p class="long-text smh">{description}</p>\n'
             f'        <details class="cource-more">\n'
             f"            <summary><button type=\"button\">"

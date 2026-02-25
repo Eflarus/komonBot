@@ -199,12 +199,12 @@ export function EventForm({ id, onNavigate, onToast }: EventFormProps) {
       <div className="form">
         <label className="form-label">
           Название *
-          <input
-            className="form-input"
-            type="text"
+          <textarea
+            className="form-textarea"
             value={form.title}
             onInput={update("title")}
-            placeholder="Название"
+            rows={2}
+            placeholder="Название (Enter для переноса строки)"
           />
         </label>
 

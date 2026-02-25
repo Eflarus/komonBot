@@ -202,12 +202,12 @@ export function CourseForm({ id, onNavigate, onToast }: CourseFormProps) {
       <div className="form">
         <label className="form-label">
           Название *
-          <input
-            className="form-input"
-            type="text"
+          <textarea
+            className="form-textarea"
             value={form.title}
             onInput={update("title")}
-            placeholder="Название курса"
+            rows={2}
+            placeholder="Название (Enter для переноса строки)"
           />
         </label>
 
