@@ -1,3 +1,5 @@
+import json
+
 import structlog
 from httpx import AsyncClient
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -49,6 +51,20 @@ class GhostClient:
         data = response.json()
         return data["pages"][0]
 
+    @staticmethod
+    def _html_to_lexical(html: str) -> str:
+        """Wrap raw HTML in a Lexical HTML card node (Ghost ignores html field on PUT)."""
+        return json.dumps({
+            "root": {
+                "children": [{"type": "html", "version": 1, "html": html}],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": "root",
+                "version": 1,
+            }
+        })
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def update_page_html(self, page_id: str, html: str) -> None:
         """Replace full HTML content of a Ghost page via PUT /pages/{id}."""
@@ -61,7 +77,7 @@ class GhostClient:
         payload = {
             "pages": [
                 {
-                    "html": html,
+                    "lexical": self._html_to_lexical(html),
                     "updated_at": updated_at,
                 }
             ]

@@ -1,8 +1,29 @@
+import { useState } from "preact/hooks";
+import { api } from "../services/api";
+
 function navigate(path: string) {
   window.location.hash = path;
 }
 
-export function Menu() {
+interface MenuProps {
+  onToast: (msg: string) => void;
+}
+
+export function Menu({ onToast }: MenuProps) {
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await api.post("/sync");
+      onToast("Сайт обновлён");
+    } catch (err: any) {
+      onToast(err.message || "Ошибка синхронизации");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="menu">
       <h1 className="menu-title">KomonBot</h1>
@@ -24,6 +45,13 @@ export function Menu() {
           <span>Пользователи</span>
         </button>
       </div>
+      <button
+        className="btn btn-primary sync-btn"
+        onClick={handleSync}
+        disabled={syncing}
+      >
+        {syncing ? "Синхронизация..." : "🔄 Обновить сайт"}
+      </button>
     </div>
   );
 }

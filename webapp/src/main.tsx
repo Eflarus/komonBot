@@ -170,7 +170,7 @@ function App() {
   } else if (parts[0] === "users") {
     content = <UserList onToast={showToast} />;
   } else {
-    content = <Menu />;
+    content = <Menu onToast={showToast} />;
   }
 
   return (
