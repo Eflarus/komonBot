@@ -68,17 +68,18 @@ class ContentPageBuilder:
         self._courses_lock = asyncio.Lock()
 
     def build_events_html(self, events: list[Event]) -> str:
-        """Render all event cards into concatenated HTML string."""
+        """Render all event cards wrapped in container div."""
         if not events:
             return "<p>Нет предстоящих мероприятий</p>"
-        return "\n".join(self._render_event_card(e) for e in events)
+        cards = "\n".join(self._render_event_card(e) for e in events)
+        return f'<div class="col3 kg-width-wide">\n{cards}\n</div>'
 
     def build_courses_html(self, courses: list[Course]) -> str:
         """Render all course cards wrapped in container div."""
         if not courses:
             return "<p>Нет доступных курсов</p>"
         cards = "\n".join(self._render_course_card(c) for c in courses)
-        return f'<div class="kg-width-wide col3">\n{cards}\n</div>'
+        return f'<div class="col3 kg-width-wide">\n{cards}\n</div>'
 
     def _render_event_card(self, event: Event) -> str:
         """Single event -> kg-product-card HTML. All user input escaped."""
