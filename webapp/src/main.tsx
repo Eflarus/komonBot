@@ -10,6 +10,7 @@ import { ContactList } from "./components/ContactList";
 import { UserList } from "./components/UserList";
 import { Menu } from "./components/Menu";
 import { Toast } from "./components/Toast";
+import { api } from "./services/api";
 
 const tg = window.Telegram?.WebApp;
 
@@ -41,31 +42,44 @@ function goBack(parts: string[]) {
   }
 }
 
+type AuthState = "loading" | "allowed" | "denied" | "no_telegram" | "error";
+
 function App() {
   const [route, setRoute] = useState<Route>(parseRoute());
   const [toast, setToast] = useState<string | null>(null);
-
-  // Auth: require Telegram environment
-  if (!tg?.initData) {
-    return (
-      <div className="app">
-        <div className="page" style={{ textAlign: "center", paddingTop: "3rem" }}>
-          <h2>Доступ запрещён</h2>
-          <p>Откройте приложение через Telegram-бот.</p>
-        </div>
-      </div>
-    );
-  }
+  const [auth, setAuth] = useState<AuthState>(
+    tg?.initData ? "loading" : "no_telegram",
+  );
 
   useEffect(() => {
+    if (auth !== "loading") return;
+    api
+      .get("/users/me")
+      .then(() => setAuth("allowed"))
+      .catch((err) => {
+        if (err.message === "Forbidden") setAuth("denied");
+        else if (err.message === "Unauthorized") setAuth("denied");
+        else setAuth("error");
+      });
+  }, [auth]);
+
+  // Signal Telegram that we're ready once auth resolves
+  useEffect(() => {
+    if (auth === "loading") return;
+    if (tg) tg.ready();
+  }, [auth]);
+
+  useEffect(() => {
+    if (auth !== "allowed") return;
+    setRoute(parseRoute());
     const onHash = () => setRoute(parseRoute());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+  }, [auth]);
 
   // Telegram Back button
   useEffect(() => {
-    if (!tg) return;
+    if (auth !== "allowed" || !tg) return;
     if (route.path === "/" || route.path === "") {
       tg.BackButton.hide();
     } else {
@@ -74,7 +88,53 @@ function App() {
       tg.BackButton.onClick(handler);
       return () => tg.BackButton.offClick(handler);
     }
-  }, [route.path]);
+  }, [auth, route.path]);
+
+  if (auth === "no_telegram") {
+    return (
+      <div className="app">
+        <div className="auth-message">
+          <h2>Доступ запрещён</h2>
+          <p>Откройте приложение через Telegram-бот.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth === "loading") {
+    return (
+      <div className="app">
+        <div className="auth-message">
+          <p>Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth === "error") {
+    return (
+      <div className="app">
+        <div className="auth-message">
+          <h2>Ошибка соединения</h2>
+          <p>Не удалось проверить доступ.</p>
+          <button className="btn" onClick={() => setAuth("loading")}>
+            Попробовать снова
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth === "denied") {
+    return (
+      <div className="app">
+        <div className="auth-message">
+          <h2>Доступ запрещён</h2>
+          <p>У вас нет доступа к этому приложению.</p>
+        </div>
+      </div>
+    );
+  }
 
   const showToast = (msg: string) => setToast(msg);
   const { parts } = route;
@@ -126,9 +186,8 @@ function App() {
   );
 }
 
-// Init Telegram WebApp
+// Init Telegram WebApp (ready() is deferred until auth resolves)
 if (tg) {
-  tg.ready();
   tg.expand();
 }
 

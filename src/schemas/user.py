@@ -3,6 +3,11 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class MeResponse(BaseModel):
+    id: int
+    first_name: str | None
+
+
 class UserCreate(BaseModel):
     telegram_id: int
     username: str | None = Field(default=None, max_length=255)

@@ -3,10 +3,16 @@ from fastapi import APIRouter, Depends
 from src.api.deps import get_current_user, get_user_repo
 from src.exceptions import NotFoundError, ValidationError
 from src.repositories.user import UserRepository
-from src.schemas.user import UserCreate, UserResponse
+from src.schemas.user import MeResponse, UserCreate, UserResponse
 from src.utils.telegram_auth import TelegramUser
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+# NOTE: /me must be declared BEFORE any /{user_id} routes to avoid path conflict
+@router.get("/me", response_model=MeResponse)
+async def get_me(user: TelegramUser = Depends(get_current_user)):
+    return MeResponse(id=user.id, first_name=user.first_name)
 
 
 @router.get("", response_model=list[UserResponse])

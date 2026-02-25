@@ -45,6 +45,10 @@ async function request<T>(
     throw new Error("Unauthorized");
   }
 
+  if (res.status === 403) {
+    throw new Error("Forbidden");
+  }
+
   if (res.status === 204) {
     return null as T;
   }
