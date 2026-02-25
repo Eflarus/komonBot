@@ -110,6 +110,24 @@ async def cancel_course(
     return await service.cancel(course_id, user.id)
 
 
+@router.post("/{course_id}/archive", response_model=CourseResponse)
+async def archive_course(
+    course_id: int,
+    user: TelegramUser = Depends(get_current_user),
+    service: CourseService = Depends(_get_course_service),
+):
+    return await service.archive(course_id, user.id)
+
+
+@router.post("/{course_id}/reactivate", response_model=CourseResponse)
+async def reactivate_course(
+    course_id: int,
+    user: TelegramUser = Depends(get_current_user),
+    service: CourseService = Depends(_get_course_service),
+):
+    return await service.reactivate(course_id, user.id)
+
+
 @router.post("/{course_id}/upload-image", response_model=ImageUploadResponse)
 async def upload_course_image(
     course_id: int,

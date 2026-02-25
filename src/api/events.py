@@ -110,6 +110,24 @@ async def cancel_event(
     return await service.cancel(event_id, user.id)
 
 
+@router.post("/{event_id}/archive", response_model=EventResponse)
+async def archive_event(
+    event_id: int,
+    user: TelegramUser = Depends(get_current_user),
+    service: EventService = Depends(_get_event_service),
+):
+    return await service.archive(event_id, user.id)
+
+
+@router.post("/{event_id}/reactivate", response_model=EventResponse)
+async def reactivate_event(
+    event_id: int,
+    user: TelegramUser = Depends(get_current_user),
+    service: EventService = Depends(_get_event_service),
+):
+    return await service.reactivate(event_id, user.id)
+
+
 @router.post("/{event_id}/upload-image", response_model=ImageUploadResponse)
 async def upload_event_image(
     event_id: int,

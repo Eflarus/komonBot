@@ -137,6 +137,26 @@ export function CourseForm({ id, onNavigate, onToast }: CourseFormProps) {
     }
   };
 
+  const archive = async () => {
+    try {
+      await api.post(`/courses/${id}/archive`);
+      setStatus("archived");
+      onToast("Архивировано");
+    } catch (e) {
+      onToast((e as Error).message);
+    }
+  };
+
+  const reactivate = async () => {
+    try {
+      await api.post(`/courses/${id}/reactivate`);
+      setStatus("draft");
+      onToast("Возвращено в черновики");
+    } catch (e) {
+      onToast((e as Error).message);
+    }
+  };
+
   const remove = async () => {
     const doDelete = async () => {
       try {
@@ -315,7 +335,20 @@ export function CourseForm({ id, onNavigate, onToast }: CourseFormProps) {
                   <button className="btn btn-danger" onClick={cancel}>
                     Отменить
                   </button>
+                  <button className="btn btn-sm" onClick={archive}>
+                    В архив
+                  </button>
                 </>
+              )}
+              {(status === "cancelled" || status === "archived") && (
+                <button className="btn btn-primary" onClick={reactivate}>
+                  В черновики
+                </button>
+              )}
+              {status === "cancelled" && (
+                <button className="btn btn-sm" onClick={archive}>
+                  В архив
+                </button>
               )}
               {status !== "published" && (
                 <button className="btn btn-danger" onClick={remove}>

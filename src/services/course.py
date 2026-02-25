@@ -122,6 +122,30 @@ class CourseService:
 
         return course
 
+    async def archive(self, course_id: int, user_id: int) -> Course:
+        course = await self.get(course_id)
+        if course.status == CourseStatus.DRAFT:
+            raise ValidationError("Нельзя архивировать черновик")
+
+        course = await self.repo.update(course, status=CourseStatus.ARCHIVED)
+        await self.audit.log(user_id, "archive", "course", course.id)
+        await self.repo.session.commit()
+
+        await self._sync_ghost_page()
+
+        return course
+
+    async def reactivate(self, course_id: int, user_id: int) -> Course:
+        course = await self.get(course_id)
+        if course.status not in (CourseStatus.CANCELLED, CourseStatus.ARCHIVED):
+            raise ValidationError("Можно вернуть только отменённый или архивный")
+
+        course = await self.repo.update(course, status=CourseStatus.DRAFT)
+        await self.audit.log(user_id, "reactivate", "course", course.id)
+        await self.repo.session.commit()
+
+        return course
+
     async def _sync_ghost_page(self) -> None:
         if self.content_page_builder:
             try:

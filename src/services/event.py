@@ -124,6 +124,30 @@ class EventService:
 
         return event
 
+    async def archive(self, event_id: int, user_id: int) -> Event:
+        event = await self.get(event_id)
+        if event.status == EventStatus.DRAFT:
+            raise ValidationError("Нельзя архивировать черновик")
+
+        event = await self.repo.update(event, status=EventStatus.ARCHIVED)
+        await self.audit.log(user_id, "archive", "event", event.id)
+        await self.repo.session.commit()
+
+        await self._sync_ghost_page()
+
+        return event
+
+    async def reactivate(self, event_id: int, user_id: int) -> Event:
+        event = await self.get(event_id)
+        if event.status not in (EventStatus.CANCELLED, EventStatus.ARCHIVED):
+            raise ValidationError("Можно вернуть только отменённое или архивное")
+
+        event = await self.repo.update(event, status=EventStatus.DRAFT)
+        await self.audit.log(user_id, "reactivate", "event", event.id)
+        await self.repo.session.commit()
+
+        return event
+
     async def _sync_ghost_page(self) -> None:
         if self.content_page_builder:
             try:
