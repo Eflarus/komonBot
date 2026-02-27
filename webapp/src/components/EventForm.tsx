@@ -310,7 +310,7 @@ export function EventForm({ id, onNavigate, onToast }: EventFormProps) {
                   <button className="btn btn-danger" onClick={cancel}>
                     Отменить
                   </button>
-                  <button className="btn btn-sm" onClick={archive}>
+                  <button className="btn" onClick={archive}>
                     В архив
                   </button>
                 </>
@@ -321,7 +321,7 @@ export function EventForm({ id, onNavigate, onToast }: EventFormProps) {
                 </button>
               )}
               {status === "cancelled" && (
-                <button className="btn btn-sm" onClick={archive}>
+                <button className="btn" onClick={archive}>
                   В архив
                 </button>
               )}

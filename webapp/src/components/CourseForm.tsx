@@ -335,7 +335,7 @@ export function CourseForm({ id, onNavigate, onToast }: CourseFormProps) {
                   <button className="btn btn-danger" onClick={cancel}>
                     Отменить
                   </button>
-                  <button className="btn btn-sm" onClick={archive}>
+                  <button className="btn" onClick={archive}>
                     В архив
                   </button>
                 </>
@@ -346,7 +346,7 @@ export function CourseForm({ id, onNavigate, onToast }: CourseFormProps) {
                 </button>
               )}
               {status === "cancelled" && (
-                <button className="btn btn-sm" onClick={archive}>
+                <button className="btn" onClick={archive}>
                   В архив
                 </button>
               )}
