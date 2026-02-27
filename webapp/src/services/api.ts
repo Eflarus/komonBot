@@ -15,12 +15,13 @@ function getApiBase(): string {
 interface RequestOptions {
   body?: unknown;
   isFormData?: boolean;
+  signal?: AbortSignal;
 }
 
 async function request<T>(
   method: string,
   path: string,
-  { body, isFormData }: RequestOptions = {},
+  { body, isFormData, signal }: RequestOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
     "X-Telegram-Init-Data": getInitData(),
@@ -29,7 +30,7 @@ async function request<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  const opts: RequestInit = { method, headers };
+  const opts: RequestInit = { method, headers, signal };
   if (body) {
     opts.body = isFormData ? (body as FormData) : JSON.stringify(body);
   }
@@ -62,7 +63,8 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
+  get: <T>(path: string, signal?: AbortSignal) =>
+    request<T>("GET", path, { signal }),
   post: <T>(path: string, body?: unknown) =>
     request<T>("POST", path, { body }),
   patch: <T>(path: string, body?: unknown) =>

@@ -167,6 +167,12 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    transition: opacity 0.15s;
+}
+
+.card-list-loading {
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 .card {
@@ -292,6 +298,7 @@ body {
     align-items: center;
     gap: 8px;
     margin-top: 10px;
+    margin-bottom: 12px;
     flex-wrap: wrap;
 }
 
@@ -417,6 +424,31 @@ body {
 @keyframes toast-in {
     from { opacity: 0; transform: translateX(-50%) translateY(10px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 8px 0;
+}
+
+.pagination .btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pagination-info {
+    font-size: 13px;
+    color: var(--hint);
+    min-width: 60px;
+    text-align: center;
 }
 
 /* Contact card specific */
