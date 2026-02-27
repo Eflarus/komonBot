@@ -10,6 +10,9 @@ export function ContactList({ onToast }: ContactListProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [tab, setTab] = useState(0); // 0=unprocessed, 1=processed, 2=all
   const [loading, setLoading] = useState(true);
+  const [sort, setSort] = useState<"desc" | "asc">("desc");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -17,6 +20,9 @@ export function ContactList({ onToast }: ContactListProps) {
       let path = "/contacts?limit=50";
       if (tab === 0) path += "&is_processed=false";
       else if (tab === 1) path += "&is_processed=true";
+      path += `&sort=${sort}`;
+      if (dateFrom) path += `&date_from=${dateFrom}`;
+      if (dateTo) path += `&date_to=${dateTo}`;
       const data = await api.get<PaginatedResponse<Contact>>(path);
       setContacts(data.items);
     } catch (e) {
@@ -27,12 +33,22 @@ export function ContactList({ onToast }: ContactListProps) {
 
   useEffect(() => {
     load();
-  }, [tab]);
+  }, [tab, sort, dateFrom, dateTo]);
 
   const markProcessed = async (id: number) => {
     try {
       await api.patch(`/contacts/${id}/process`);
       onToast("Заявка обработана");
+      load();
+    } catch (e) {
+      onToast((e as Error).message);
+    }
+  };
+
+  const markUnprocessed = async (id: number) => {
+    try {
+      await api.patch(`/contacts/${id}/unprocess`);
+      onToast("Заявка возвращена");
       load();
     } catch (e) {
       onToast((e as Error).message);
@@ -64,6 +80,40 @@ export function ContactList({ onToast }: ContactListProps) {
         </button>
       </div>
 
+      <div className="filters">
+        <button
+          className="btn btn-sm"
+          onClick={() => setSort(sort === "desc" ? "asc" : "desc")}
+        >
+          Дата {sort === "desc" ? "↓" : "↑"}
+        </button>
+        <input
+          type="date"
+          className="filter-date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom((e.target as HTMLInputElement).value)}
+          placeholder="С"
+        />
+        <input
+          type="date"
+          className="filter-date"
+          value={dateTo}
+          onChange={(e) => setDateTo((e.target as HTMLInputElement).value)}
+          placeholder="По"
+        />
+        {(dateFrom || dateTo) && (
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              setDateFrom("");
+              setDateTo("");
+            }}
+          >
+            Сбросить
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <div className="loading">Загрузка...</div>
       ) : (
@@ -79,6 +129,28 @@ export function ContactList({ onToast }: ContactListProps) {
                   {c.is_processed ? "Обработана" : "Новая"}
                 </span>
               </div>
+              {!c.is_processed && (
+                <button
+                  className="btn btn-success btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markProcessed(c.id);
+                  }}
+                >
+                  Обработать
+                </button>
+              )}
+              {c.is_processed && (
+                <button
+                  className="btn btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markUnprocessed(c.id);
+                  }}
+                >
+                  Вернуть
+                </button>
+              )}
               <div className="card-meta">
                 <div>Тел: {c.phone}</div>
                 {c.email && <div>Email: {c.email}</div>}
@@ -88,17 +160,6 @@ export function ContactList({ onToast }: ContactListProps) {
               <div className="card-meta">
                 {new Date(c.created_at).toLocaleString("ru")}
               </div>
-              {!c.is_processed && (
-                <button
-                  className="btn btn-success btn-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    markProcessed(c.id);
-                  }}
-                >
-                  Обработано
-                </button>
-              )}
             </div>
           ))}
         </div>

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query, Request
 from slowapi import Limiter
@@ -60,8 +60,13 @@ async def list_contacts(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     is_processed: bool | None = None,
+    sort: str = Query(default="desc", pattern="^(asc|desc)$"),
+    date_from: date | None = None,
+    date_to: date | None = None,
 ):
-    items, total = await repo.list_filtered(offset, limit, is_processed)
+    items, total = await repo.list_filtered(
+        offset, limit, is_processed, sort, date_from, date_to,
+    )
     return {
         "items": [ContactResponse.model_validate(i) for i in items],
         "total": total,
@@ -85,6 +90,26 @@ async def process_contact(
         is_processed=True,
         processed_by=user.id,
         processed_at=datetime.now(UTC).replace(tzinfo=None),
+    )
+    await repo.session.commit()
+    return contact
+
+
+@router.patch("/{contact_id}/unprocess", response_model=ContactResponse)
+async def unprocess_contact(
+    contact_id: int,
+    user: TelegramUser = Depends(get_current_user),
+    repo: ContactRepository = Depends(get_contact_repo),
+):
+    contact = await repo.get(contact_id)
+    if not contact:
+        raise NotFoundError("Contact", contact_id)
+
+    contact = await repo.update(
+        contact,
+        is_processed=False,
+        processed_by=None,
+        processed_at=None,
     )
     await repo.session.commit()
     return contact

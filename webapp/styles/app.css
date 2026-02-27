@@ -280,7 +280,28 @@ body {
 .btn-sm {
     padding: 6px 12px;
     font-size: 12px;
+}
+
+.card .btn-sm {
     margin-top: 8px;
+}
+
+/* Filters */
+.filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.filter-date {
+    padding: 6px 10px;
+    border: 1px solid var(--secondary-bg);
+    border-radius: 10px;
+    background: var(--section-bg);
+    color: var(--text);
+    font-size: 12px;
 }
 
 /* Forms */

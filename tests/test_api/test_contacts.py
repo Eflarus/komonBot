@@ -56,3 +56,34 @@ class TestContactAdmin:
         )
         assert resp.status_code == 200
         assert resp.json()["is_processed"] is True
+
+    async def test_unprocess_contact(self, client, auth_headers):
+        create = await client.post("/api/contacts", json=make_contact())
+        contact_id = create.json()["id"]
+        await client.patch(
+            f"/api/contacts/{contact_id}/process", headers=auth_headers
+        )
+        resp = await client.patch(
+            f"/api/contacts/{contact_id}/unprocess", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["is_processed"] is False
+        assert resp.json()["processed_by"] is None
+
+    async def test_sort_contacts(self, client, auth_headers):
+        await client.post("/api/contacts", json=make_contact(name="First"))
+        await client.post("/api/contacts", json=make_contact(name="Second"))
+        resp = await client.get("/api/contacts?sort=asc", headers=auth_headers)
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 2
+        assert items[0]["name"] == "First"
+
+    async def test_filter_by_date(self, client, auth_headers):
+        await client.post("/api/contacts", json=make_contact())
+        resp = await client.get(
+            "/api/contacts?date_from=2020-01-01&date_to=2030-01-01",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] >= 1
