@@ -21,9 +21,11 @@ async def setup_bot() -> None:
         return
 
     from src.bot.handlers.backup import router as backup_router
+    from src.bot.handlers.export import router as export_router
     from src.bot.handlers.start import router as start_router
 
     dp.include_router(backup_router)
+    dp.include_router(export_router)
     dp.include_router(start_router)
 
     await bot.set_chat_menu_button(
