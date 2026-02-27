@@ -209,36 +209,32 @@ export function ContactList({ onToast }: ContactListProps) {
               <div key={c.id} className="card contact-card">
                 <div className="card-header">
                   <span className="card-title">{c.name}</span>
-                  <span
-                    className={`status-badge ${c.is_processed ? "status-archived" : "status-draft"}`}
-                  >
-                    {c.is_processed ? "Обработана" : "Новая"}
-                  </span>
+                  <div className="card-header-actions">
+                    {!c.is_processed ? (
+                      <button
+                        className="btn btn-success btn-sm"
+                        disabled={actionIds.has(c.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markProcessed(c.id);
+                        }}
+                      >
+                        Обработать
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-sm"
+                        disabled={actionIds.has(c.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markUnprocessed(c.id);
+                        }}
+                      >
+                        Вернуть
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {!c.is_processed && (
-                  <button
-                    className="btn btn-success btn-sm"
-                    disabled={actionIds.has(c.id)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      markProcessed(c.id);
-                    }}
-                  >
-                    Обработать
-                  </button>
-                )}
-                {c.is_processed && (
-                  <button
-                    className="btn btn-sm"
-                    disabled={actionIds.has(c.id)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      markUnprocessed(c.id);
-                    }}
-                  >
-                    Вернуть
-                  </button>
-                )}
                 <div className="card-meta">
                   <div>Тел: {c.phone}</div>
                   {c.email && <div>Email: {c.email}</div>}
