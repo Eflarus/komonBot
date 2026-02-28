@@ -138,14 +138,14 @@ async def upload_course_image(
     content_page_builder=Depends(get_content_page_builder),
 ):
     course = await service.get(course_id)
-    content = await validate_image(file)
+    content, safe_name = await validate_image(file)
 
     if content_page_builder and content_page_builder.ghost_client:
         url = await content_page_builder.ghost_client.upload_image(
-            content, file.filename or "image.jpg"
+            content, safe_name
         )
     else:
-        url = f"/uploads/{file.filename}"
+        url = f"/uploads/{safe_name}"
 
     field = "image_desktop" if type == "desktop" else "image_mobile"
     course = await service.repo.update(course, **{field: url})

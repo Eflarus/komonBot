@@ -137,14 +137,14 @@ async def upload_event_image(
     content_page_builder=Depends(get_content_page_builder),
 ):
     event = await service.get(event_id)
-    content = await validate_image(file)
+    content, safe_name = await validate_image(file)
 
     if content_page_builder and content_page_builder.ghost_client:
         url = await content_page_builder.ghost_client.upload_image(
-            content, file.filename or "image.jpg"
+            content, safe_name
         )
     else:
-        url = f"/uploads/{file.filename}"
+        url = f"/uploads/{safe_name}"
 
     event = await service.repo.update(event, cover_image=url)
     await service.repo.session.commit()
