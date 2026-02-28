@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     GHOST_COURSES_PAGE_ID: str = ""
 
     # App
-    SECRET_KEY: str = "change-me"
+    SECRET_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     TIMEZONE: str = "Europe/Moscow"
     ADMIN_TELEGRAM_IDS_STR: str = ""

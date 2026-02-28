@@ -23,6 +23,12 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Starting KomonBot", root_path=settings.ROOT_PATH)
 
+    if not settings.SECRET_KEY:
+        logger.warning("SECRET_KEY not set — using insecure default. Set it in .env")
+
+    if not settings.WEBHOOK_SECRET:
+        logger.warning("WEBHOOK_SECRET not set — webhook endpoint is unprotected")
+
     # Seed initial admins
     from sqlalchemy import select
 
