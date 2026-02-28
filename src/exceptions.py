@@ -8,7 +8,7 @@ class AppError(Exception):
 
 class NotFoundError(AppError):
     def __init__(self, entity: str, entity_id: int):
-        super().__init__(404, "not_found", f"{entity} #{entity_id} not found")
+        super().__init__(404, "not_found", "Resource not found")
 
 
 class ValidationError(AppError):

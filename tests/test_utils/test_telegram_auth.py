@@ -43,29 +43,43 @@ class TestValidateInitData:
         assert user.id == 12345
 
     def test_expired_init_data(self):
-        old_time = str(int(time.time()) - 700)  # > 10 min
+        old_time = str(int(time.time()) - 700)
         init_data = _make_init_data(auth_date=old_time)
-        with pytest.raises(AuthError, match="expired"):
+        with pytest.raises(AuthError, match="Authentication failed"):
             validate_init_data(init_data, BOT_TOKEN)
 
     def test_tampered_hash(self):
         init_data = _make_init_data(tamper_hash=True)
-        with pytest.raises(AuthError, match="signature"):
+        with pytest.raises(AuthError, match="Authentication failed"):
             validate_init_data(init_data, BOT_TOKEN)
 
     def test_wrong_bot_token(self):
         init_data = _make_init_data(bot_token="other:token")
-        with pytest.raises(AuthError, match="signature"):
+        with pytest.raises(AuthError, match="Authentication failed"):
             validate_init_data(init_data, BOT_TOKEN)
 
     def test_empty_init_data(self):
-        with pytest.raises(AuthError, match="Missing"):
+        with pytest.raises(AuthError, match="Authentication failed"):
             validate_init_data("", BOT_TOKEN)
 
     def test_missing_hash(self):
-        with pytest.raises(AuthError, match="Invalid initData"):
+        with pytest.raises(AuthError, match="Authentication failed"):
             validate_init_data("auth_date=123&user={}", BOT_TOKEN)
 
     def test_missing_user(self):
-        with pytest.raises(AuthError, match="Invalid initData"):
+        with pytest.raises(AuthError, match="Authentication failed"):
             validate_init_data("auth_date=123&hash=abc", BOT_TOKEN)
+
+    def test_all_errors_have_same_message(self):
+        """Ensure all error scenarios return the same generic message."""
+        cases = [
+            ("", BOT_TOKEN),
+            ("auth_date=123&user={}", BOT_TOKEN),
+            ("auth_date=123&hash=abc", BOT_TOKEN),
+            (_make_init_data(tamper_hash=True), BOT_TOKEN),
+            (_make_init_data(auth_date=str(int(time.time()) - 700)), BOT_TOKEN),
+        ]
+        for init_data, token in cases:
+            with pytest.raises(AuthError) as exc_info:
+                validate_init_data(init_data, token)
+            assert exc_info.value.message == "Authentication failed"
