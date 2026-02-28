@@ -14,6 +14,9 @@ async def telegram_webhook(
     request: Request,
     x_telegram_bot_api_secret_token: str = Header(...),
 ):
+    if not settings.WEBHOOK_SECRET:
+        raise HTTPException(403, "Forbidden")
+
     if not hmac.compare_digest(x_telegram_bot_api_secret_token, settings.WEBHOOK_SECRET):
         raise HTTPException(403, "Invalid webhook secret")
 

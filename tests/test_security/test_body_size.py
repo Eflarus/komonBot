@@ -16,3 +16,12 @@ class TestBodySizeLimit:
 
         resp = await client.post("/api/contacts", json=make_contact())
         assert resp.status_code == 201
+
+    async def test_oversized_body_rejected_without_content_length(self, client):
+        """Stream-level guard catches oversized body even without Content-Length."""
+        resp = await client.post(
+            "/api/contacts",
+            content="x" * (3 * 1024 * 1024),
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 413

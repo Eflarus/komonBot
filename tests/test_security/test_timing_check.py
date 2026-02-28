@@ -24,3 +24,11 @@ class TestTimingCheck:
         assert resp.status_code == 201
         assert resp.json()["status"] == "ok"
         assert "id" not in resp.json()
+
+    async def test_submit_with_stale_timestamp_silently_dropped(self, client):
+        """Submissions with form_ts older than MAX_SUBMIT_TIME are silently dropped."""
+        data = make_contact(form_ts=int(time.time()) - 7200)  # 2 hours ago
+        resp = await client.post("/api/contacts", json=data)
+        assert resp.status_code == 201
+        assert resp.json()["status"] == "ok"
+        assert "id" not in resp.json()

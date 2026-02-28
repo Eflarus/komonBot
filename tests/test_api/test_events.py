@@ -161,3 +161,21 @@ class TestEventAuth:
             "/api/events", headers={"X-Telegram-Init-Data": init_data}
         )
         assert resp.status_code == 403
+
+
+class TestEventRBAC:
+    async def test_editor_can_create_event(self, client, auth_headers, editor_headers):
+        resp = await client.post("/api/events", json=make_event(), headers=editor_headers)
+        assert resp.status_code == 201
+
+    async def test_editor_cannot_delete_event(self, client, auth_headers, editor_headers):
+        create = await client.post("/api/events", json=make_event(), headers=auth_headers)
+        event_id = create.json()["id"]
+        resp = await client.delete(f"/api/events/{event_id}", headers=editor_headers)
+        assert resp.status_code == 403
+
+    async def test_admin_can_delete_event(self, client, auth_headers):
+        create = await client.post("/api/events", json=make_event(), headers=auth_headers)
+        event_id = create.json()["id"]
+        resp = await client.delete(f"/api/events/{event_id}", headers=auth_headers)
+        assert resp.status_code == 204

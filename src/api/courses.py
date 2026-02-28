@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, UploadFile
 
 from src.api.deps import (
+    get_admin_user,
     get_audit_service,
     get_content_page_builder,
     get_course_repo,
@@ -77,7 +78,7 @@ async def update_course(
 @router.delete("/{course_id}", status_code=204)
 async def delete_course(
     course_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: TelegramUser = Depends(get_admin_user),
     service: CourseService = Depends(_get_course_service),
 ):
     await service.delete(course_id, user.id)

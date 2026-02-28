@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, UploadFile
 
 from src.api.deps import (
+    get_admin_user,
     get_audit_service,
     get_content_page_builder,
     get_current_user,
@@ -77,7 +78,7 @@ async def update_event(
 @router.delete("/{event_id}", status_code=204)
 async def delete_event(
     event_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: TelegramUser = Depends(get_admin_user),
     service: EventService = Depends(_get_event_service),
 ):
     await service.delete(event_id, user.id)

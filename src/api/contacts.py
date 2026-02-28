@@ -1,6 +1,7 @@
 import time
 from datetime import UTC, date, datetime
 
+import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from slowapi import Limiter
 
@@ -9,6 +10,8 @@ from src.exceptions import NotFoundError
 from src.repositories.contact import ContactRepository
 from src.schemas.contact import ContactCreate, ContactResponse
 from src.utils.telegram_auth import TelegramUser
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -39,12 +42,12 @@ async def submit_contact(
     if data.website:
         return {"status": "ok"}
 
-    # Timing check: reject submissions faster than MIN_SUBMIT_TIME
-    from src.schemas.contact import MIN_SUBMIT_TIME
+    # Timing check: reject submissions too fast or with stale/future timestamps
+    from src.schemas.contact import MAX_SUBMIT_TIME, MIN_SUBMIT_TIME
 
     if data.form_ts is not None:
         elapsed = int(time.time()) - data.form_ts
-        if elapsed < MIN_SUBMIT_TIME:
+        if elapsed < MIN_SUBMIT_TIME or elapsed > MAX_SUBMIT_TIME:
             return {"status": "ok"}  # silently drop, same as honeypot
 
     contact = await repo.create(
@@ -68,7 +71,7 @@ async def submit_contact(
             )
             await notification_service.notify_contact_submission(msg)
         except Exception:
-            pass  # don't fail contact submission on notification error
+            logger.exception("Failed to send contact notification")
 
     return {"status": "ok", "id": contact.id}
 

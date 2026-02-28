@@ -1,5 +1,36 @@
 # Changelog
 
+## [2026-02-28] Security Hardening — Round 2
+
+Follow-up fixes after hard-critic review (5.5/10 → 8/10).
+
+- **Body size middleware rewritten as ASGI middleware** — Previous `@app.middleware("http")` approach only checked `Content-Length` header (easily omitted/spoofed). New `BodySizeLimitMiddleware` wraps the ASGI `receive` callable to count actual bytes streamed. Handles malformed `Content-Length` without crashing. Tracks whether response headers were already sent to avoid ASGI double-response violation. (`src/main.py`)
+
+- **Webhook secret empty string bypass** — `hmac.compare_digest("", "")` returned `True` when `WEBHOOK_SECRET` was not configured. Now rejects with 403 when secret is empty. (`src/api/webhook.py`)
+
+- **RBAC enforced on event/course deletion** — Delete endpoints now require `get_admin_user` (admin role). Editors can still create, edit, and manage lifecycle. (`src/api/events.py`, `src/api/courses.py`)
+
+- **Notification throttle race condition** — Added `asyncio.Lock` to `notify_contact_submission()` to prevent concurrent requests from bypassing the 30s throttle window. (`src/services/notification.py`)
+
+- **Notifications restricted to admins** — `notify_admins()` now queries `get_admin_telegram_ids()` instead of `get_all_telegram_ids()`, so editors don't receive admin notifications. Uses `ROLE_ADMIN` constant. (`src/services/notification.py`, `src/repositories/user.py`)
+
+- **Timing check upper bound** — Stale `form_ts` (>1 hour old) now silently dropped. Previously only checked for too-fast submissions. (`src/api/contacts.py`, `src/schemas/contact.py`)
+
+- **CORS methods/headers restricted** — Replaced `allow_methods=["*"]` / `allow_headers=["*"]` with explicit lists. (`src/main.py`)
+
+- **Silent notification failure logged** — `except Exception: pass` replaced with `logger.exception()`. (`src/api/contacts.py`)
+
+### Test Coverage
+
+- `test_timing_check.py` — Added stale timestamp test (4 total)
+- `test_body_size.py` — Added no-Content-Length body rejection test (4 total)
+- `test_api/test_events.py` — Added RBAC tests: editor create/delete, admin delete (3 new)
+- `test_api/test_courses.py` — Added RBAC tests: editor create/delete, admin delete (3 new)
+
+Total: **110 tests passing**.
+
+---
+
 ## [2026-02-28] Security Audit & Hardening
 
 Comprehensive security audit identified 10 vulnerabilities across the API, bot handlers, and infrastructure. All issues fixed and tested.
@@ -26,7 +57,7 @@ Comprehensive security audit identified 10 vulnerabilities across the API, bot h
 
 - **Verbose error messages** — Auth errors revealed specific failure reasons (`"initData expired"`, `"Invalid signature"`), letting attackers distinguish attack scenarios. All auth errors now return `"Authentication failed"`. `NotFoundError` returns `"Resource not found"` instead of entity name and ID. (`src/utils/telegram_auth.py`, `src/exceptions.py`)
 
-- **No request body size limit** — No global limit on request body size. An attacker could send 100MB+ payloads to exhaust server memory. Added 2MB middleware limit via `Content-Length` check. (`src/main.py`)
+- **No request body size limit** — No global limit on request body size. An attacker could send 100MB+ payloads to exhaust server memory. Added 2MB ASGI-level body size limit with stream counting. (`src/main.py`)
 
 ### LOW
 
@@ -34,13 +65,15 @@ Comprehensive security audit identified 10 vulnerabilities across the API, bot h
 
 ### Test Coverage
 
-Added 28 new tests across `tests/test_security/`:
-- `test_rate_limit.py` — IP extraction from proxy headers (6 tests)
-- `test_notification_throttle.py` — Notification throttling (3 tests)
-- `test_filename_sanitize.py` — UUID filename generation (6 tests)
-- `test_timing_check.py` — Anti-bot timing validation (3 tests)
-- `test_body_size.py` — Request size limit (3 tests)
+Added 36 new tests:
+- `test_security/test_rate_limit.py` — IP extraction from proxy headers (6 tests)
+- `test_security/test_notification_throttle.py` — Notification throttling (3 tests)
+- `test_security/test_filename_sanitize.py` — UUID filename generation (6 tests)
+- `test_security/test_timing_check.py` — Anti-bot timing validation (4 tests)
+- `test_security/test_body_size.py` — Request size limit (4 tests)
 - `test_api/test_users.py` — Role-based access control (6 new tests)
+- `test_api/test_events.py` — Event RBAC (3 new tests)
+- `test_api/test_courses.py` — Course RBAC (3 new tests)
 - `test_utils/test_telegram_auth.py` — Generic error message verification (1 new test)
 
-Total: **102 tests passing**.
+Total: **110 tests passing**.

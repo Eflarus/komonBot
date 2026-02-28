@@ -27,7 +27,7 @@ class TestContactNotificationThrottle:
             with patch(
                 "src.services.notification.UserRepository"
             ) as mock_repo_cls:
-                mock_repo_cls.return_value.get_all_telegram_ids = AsyncMock(
+                mock_repo_cls.return_value.get_admin_telegram_ids = AsyncMock(
                     return_value=[111]
                 )
                 await service.notify_contact_submission("test msg")
@@ -43,7 +43,7 @@ class TestContactNotificationThrottle:
             with patch(
                 "src.services.notification.UserRepository"
             ) as mock_repo_cls:
-                mock_repo_cls.return_value.get_all_telegram_ids = AsyncMock(
+                mock_repo_cls.return_value.get_admin_telegram_ids = AsyncMock(
                     return_value=[111]
                 )
 
@@ -63,7 +63,7 @@ class TestContactNotificationThrottle:
             with patch(
                 "src.services.notification.UserRepository"
             ) as mock_repo_cls:
-                mock_repo_cls.return_value.get_all_telegram_ids = AsyncMock(
+                mock_repo_cls.return_value.get_admin_telegram_ids = AsyncMock(
                     return_value=[111]
                 )
 

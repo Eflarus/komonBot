@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.user import WhitelistUser
+from src.models.user import ROLE_ADMIN, WhitelistUser
 from src.repositories.base import BaseRepository
 
 
@@ -16,5 +16,12 @@ class UserRepository(BaseRepository[WhitelistUser]):
 
     async def get_all_telegram_ids(self) -> list[int]:
         query = select(WhitelistUser.telegram_id)
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_admin_telegram_ids(self) -> list[int]:
+        query = select(WhitelistUser.telegram_id).where(
+            WhitelistUser.role == ROLE_ADMIN
+        )
         result = await self.session.execute(query)
         return list(result.scalars().all())

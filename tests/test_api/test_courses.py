@@ -63,3 +63,21 @@ class TestCourseLifecycle:
         await client.post(f"/api/courses/{course_id}/publish", headers=auth_headers)
         resp = await client.delete(f"/api/courses/{course_id}", headers=auth_headers)
         assert resp.status_code == 400
+
+
+class TestCourseRBAC:
+    async def test_editor_can_create_course(self, client, auth_headers, editor_headers):
+        resp = await client.post("/api/courses", json=make_course(), headers=editor_headers)
+        assert resp.status_code == 201
+
+    async def test_editor_cannot_delete_course(self, client, auth_headers, editor_headers):
+        create = await client.post("/api/courses", json=make_course(), headers=auth_headers)
+        course_id = create.json()["id"]
+        resp = await client.delete(f"/api/courses/{course_id}", headers=editor_headers)
+        assert resp.status_code == 403
+
+    async def test_admin_can_delete_course(self, client, auth_headers):
+        create = await client.post("/api/courses", json=make_course(), headers=auth_headers)
+        course_id = create.json()["id"]
+        resp = await client.delete(f"/api/courses/{course_id}", headers=auth_headers)
+        assert resp.status_code == 204

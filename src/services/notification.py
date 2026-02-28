@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import structlog
@@ -16,12 +17,13 @@ class NotificationService:
         self.bot = bot
         self._last_contact_notify: float = 0
         self._suppressed_count: int = 0
+        self._throttle_lock = asyncio.Lock()
 
     async def notify_admins(self, message: str) -> None:
-        """Send message to all whitelisted admin users."""
+        """Send message to admin-role users only."""
         async with async_session_factory() as session:
             repo = UserRepository(session)
-            admin_ids = await repo.get_all_telegram_ids()
+            admin_ids = await repo.get_admin_telegram_ids()
 
         for tg_id in admin_ids:
             try:
@@ -31,22 +33,24 @@ class NotificationService:
 
     async def notify_contact_submission(self, message: str) -> None:
         """Throttled notification for new contact submissions."""
-        now = time.monotonic()
-        elapsed = now - self._last_contact_notify
+        async with self._throttle_lock:
+            now = time.monotonic()
+            elapsed = now - self._last_contact_notify
 
-        if elapsed < CONTACT_NOTIFY_INTERVAL:
-            self._suppressed_count += 1
-            logger.info(
-                "contact_notification_throttled",
-                suppressed=self._suppressed_count,
-            )
-            return
+            if elapsed < CONTACT_NOTIFY_INTERVAL:
+                self._suppressed_count += 1
+                logger.info(
+                    "contact_notification_throttled",
+                    suppressed=self._suppressed_count,
+                )
+                return
 
-        if self._suppressed_count > 0:
-            message += f"\n\n(+{self._suppressed_count} за последние {CONTACT_NOTIFY_INTERVAL}с)"
+            if self._suppressed_count > 0:
+                message += f"\n\n(+{self._suppressed_count} за последние {CONTACT_NOTIFY_INTERVAL}с)"
 
-        self._last_contact_notify = now
-        self._suppressed_count = 0
+            self._last_contact_notify = now
+            self._suppressed_count = 0
+
         await self.notify_admins(message)
 
     async def notify_user(self, telegram_id: int, message: str) -> None:

@@ -130,8 +130,8 @@ if settings.ALLOWED_ORIGINS:
         CORSMiddleware,
         allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Telegram-Init-Data", "X-Request-ID"],
     )
 else:
     # No wildcard — only same-origin requests allowed when not configured
@@ -141,16 +141,78 @@ else:
 MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 MB
 
 
-# Request body size limit middleware
-@app.middleware("http")
-async def limit_body_size(request: Request, call_next):
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_BODY_SIZE:
-        return JSONResponse(
-            status_code=413,
-            content={"error": "payload_too_large", "message": "Request body too large"},
+class BodySizeLimitMiddleware:
+    """ASGI middleware that limits request body size at the stream level.
+
+    Wraps the ASGI receive callable to track bytes read and reject
+    requests that exceed MAX_BODY_SIZE — even without Content-Length.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Fast reject via Content-Length header
+        headers = dict(
+            (k.lower(), v)
+            for k, v in (scope.get("headers") or [])
         )
-    return await call_next(request)
+        content_length = headers.get(b"content-length")
+        if content_length:
+            try:
+                cl = int(content_length)
+            except (ValueError, OverflowError):
+                cl = 0  # let stream-level guard handle it
+            if cl > MAX_BODY_SIZE:
+                response = JSONResponse(
+                    status_code=413,
+                    content={"error": "payload_too_large", "message": "Request body too large"},
+                )
+                await response(scope, receive, send)
+                return
+
+        # Stream-level guard: wrap receive to count bytes
+        bytes_received = 0
+        response_started = False
+
+        async def limited_receive():
+            nonlocal bytes_received
+            message = await receive()
+            if message.get("type") == "http.request":
+                body = message.get("body", b"")
+                bytes_received += len(body)
+                if bytes_received > MAX_BODY_SIZE:
+                    raise _BodyTooLarge()
+            return message
+
+        async def tracking_send(message):
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, tracking_send)
+        except _BodyTooLarge:
+            if not response_started:
+                response = JSONResponse(
+                    status_code=413,
+                    content={"error": "payload_too_large", "message": "Request body too large"},
+                )
+                await response(scope, receive, send)
+            else:
+                logger.warning("body_size_exceeded_after_response_started")
+
+
+class _BodyTooLarge(Exception):
+    pass
+
+
+app.add_middleware(BodySizeLimitMiddleware)
 
 
 # Request ID middleware

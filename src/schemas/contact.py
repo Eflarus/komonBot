@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 MIN_SUBMIT_TIME = 3  # seconds — reject submissions faster than this
+MAX_SUBMIT_TIME = 3600  # seconds (1 hour) — reject stale form timestamps
 
 
 class ContactCreate(BaseModel):
