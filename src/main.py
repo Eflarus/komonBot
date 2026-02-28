@@ -132,6 +132,21 @@ else:
     logger.warning("ALLOWED_ORIGINS not set, CORS disabled (same-origin only)")
 
 
+MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 MB
+
+
+# Request body size limit middleware
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BODY_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"error": "payload_too_large", "message": "Request body too large"},
+        )
+    return await call_next(request)
+
+
 # Request ID middleware
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
