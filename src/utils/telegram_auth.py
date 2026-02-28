@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from src.exceptions import AuthError
 
-INIT_DATA_MAX_AGE = 600  # seconds (10 min)
+INIT_DATA_MAX_AGE = 300  # seconds (5 min)
 
 
 class TelegramUser(BaseModel):
