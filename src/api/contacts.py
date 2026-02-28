@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -37,6 +38,14 @@ async def submit_contact(
     # Honeypot check: if website field is filled, silently drop
     if data.website:
         return {"status": "ok"}
+
+    # Timing check: reject submissions faster than MIN_SUBMIT_TIME
+    from src.schemas.contact import MIN_SUBMIT_TIME
+
+    if data.form_ts is not None:
+        elapsed = int(time.time()) - data.form_ts
+        if elapsed < MIN_SUBMIT_TIME:
+            return {"status": "ok"}  # silently drop, same as honeypot
 
     contact = await repo.create(
         name=data.name,

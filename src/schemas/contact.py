@@ -4,6 +4,9 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
+MIN_SUBMIT_TIME = 3  # seconds — reject submissions faster than this
+
+
 class ContactCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(pattern=r"^\+?[\d\s\-\(\)]{7,20}$")
@@ -11,6 +14,7 @@ class ContactCreate(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     source: str | None = Field(default=None, max_length=50)
     website: str | None = Field(default=None)  # honeypot: if filled, silently drop
+    form_ts: int | None = Field(default=None)  # form render timestamp (anti-bot)
 
     @field_validator("name", "message")
     @classmethod
