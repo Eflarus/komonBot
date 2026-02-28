@@ -47,7 +47,7 @@ async def submit_contact(
     )
     await repo.session.commit()
 
-    # Notify admins
+    # Notify admins (throttled to prevent spam flood)
     if notification_service:
         try:
             msg = (
@@ -57,7 +57,7 @@ async def submit_contact(
                 f"Сообщение: {contact.message}\n"
                 f"Источник: {contact.source or 'не указан'}"
             )
-            await notification_service.notify_admins(msg)
+            await notification_service.notify_contact_submission(msg)
         except Exception:
             pass  # don't fail contact submission on notification error
 
