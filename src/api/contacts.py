@@ -2,7 +2,6 @@ from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query, Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from src.api.deps import get_contact_repo, get_current_user, get_notification_service
 from src.exceptions import NotFoundError
@@ -12,7 +11,19 @@ from src.utils.telegram_auth import TelegramUser
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
-limiter = Limiter(key_func=get_remote_address)
+
+def _get_real_ip(request: Request) -> str:
+    """Extract real client IP from proxy headers, fall back to remote address."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=_get_real_ip)
 
 
 @router.post("", status_code=201)
