@@ -25,6 +25,21 @@ async def get_current_user(
     return user
 
 
+async def get_admin_user(
+    x_telegram_init_data: str = Header(...),
+    db: AsyncSession = Depends(get_db),
+) -> TelegramUser:
+    """Validate initData and check user has admin role."""
+    user = validate_init_data(x_telegram_init_data, settings.TELEGRAM_BOT_TOKEN)
+    user_repo = UserRepository(db)
+    whitelisted = await user_repo.get_by_telegram_id(user.id)
+    if not whitelisted:
+        raise ForbiddenError("User not in whitelist")
+    if not whitelisted.is_admin:
+        raise ForbiddenError("Admin access required")
+    return user
+
+
 async def get_event_repo(db: AsyncSession = Depends(get_db)) -> EventRepository:
     return EventRepository(db)
 

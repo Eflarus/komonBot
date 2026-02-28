@@ -31,8 +31,9 @@ test_session_factory = async_sessionmaker(test_engine, expire_on_commit=False)
 
 @pytest_asyncio.fixture(autouse=True, scope="session")
 async def _create_tables():
-    """Ensure all tables exist (idempotent via create_all)."""
+    """Drop and recreate all tables to match current models."""
     async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
     await test_engine.dispose()
@@ -87,6 +88,20 @@ def auth_headers():
     return {"X-Telegram-Init-Data": make_init_data()}
 
 
+@pytest_asyncio.fixture
+async def editor_headers(client):
+    """Auth headers for a non-admin (editor) user."""
+    from src.models.user import WhitelistUser
+
+    editor_tg_id = 111222333
+    async with test_session_factory() as session:
+        session.add(
+            WhitelistUser(telegram_id=editor_tg_id, username="editor", role="editor")
+        )
+        await session.commit()
+    return {"X-Telegram-Init-Data": make_init_data(user_id=editor_tg_id)}
+
+
 @pytest.fixture
 def mock_ghost():
     ghost = MagicMock()
@@ -129,7 +144,7 @@ async def client(
     # Seed test admin
     async with test_session_factory() as session:
         session.add(
-            WhitelistUser(telegram_id=123456789, username="testadmin")
+            WhitelistUser(telegram_id=123456789, username="testadmin", role="admin")
         )
         await session.commit()
 

@@ -34,8 +34,11 @@ async def lifespan(app: FastAPI):
             result = await session.execute(
                 select(WhitelistUser).where(WhitelistUser.telegram_id == tg_id)
             )
-            if not result.scalar_one_or_none():
-                session.add(WhitelistUser(telegram_id=tg_id, added_by=None))
+            existing = result.scalar_one_or_none()
+            if not existing:
+                session.add(WhitelistUser(telegram_id=tg_id, added_by=None, role="admin"))
+            elif existing.role != "admin":
+                existing.role = "admin"
         await session.commit()
 
     # Ghost client + content page builder

@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     username: str | None = Field(default=None, max_length=255)
     first_name: str | None = Field(default=None, max_length=255)
     last_name: str | None = Field(default=None, max_length=255)
+    role: str = Field(default="editor", pattern="^(admin|editor)$")
 
 
 class UserResponse(BaseModel):
@@ -21,6 +22,7 @@ class UserResponse(BaseModel):
     username: str | None
     first_name: str | None
     last_name: str | None
+    role: str
     added_by: int | None
     created_at: datetime
 
